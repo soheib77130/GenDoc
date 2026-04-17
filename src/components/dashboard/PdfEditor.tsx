@@ -229,28 +229,40 @@ export function PdfEditor({ usage }: {
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const scriptFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-      // 1. Apply edited text items (erase + rewrite)
+      // 1. Apply edited text items — erase ONLY the original glyph shapes (no
+      // rectangle), then redraw. This preserves surrounding lines, boxes and
+      // colored form fields instead of masking them with a block of color.
       for (const t of textItems.filter(t => t.edited)) {
         const p = pdfPages[t.page - 1];
         if (!p) continue;
-        // Tight erase rectangle that matches the original text bounding box.
-        // Use descent ~20% of font size below baseline, ascent = font size above.
-        const descent = t.pdfFontSize * 0.22;
-        const ascent = t.pdfFontSize * 1.02;
-        p.drawRectangle({
-          x: t.pdfX - 0.5,
-          y: t.pdfY - descent,
-          width: t.pdfWidth + 1,
-          height: ascent + descent,
-          color: rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b),
-          borderWidth: 0,
-        });
-        // Auto-scale new text to fit the original width if longer
-        let size = t.pdfFontSize;
-        const measure = (s: number) => font.widthOfTextAtSize(t.current, s);
-        if (t.pdfWidth > 0 && measure(size) > t.pdfWidth) {
-          size = Math.max(6, size * (t.pdfWidth / measure(size)));
+
+        const bg = rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b);
+
+        // Redraw the original text in the background color, with tiny offsets
+        // to cover anti-aliasing halos. This only masks the ink of the old
+        // letters, not any rectangular area around them.
+        const offsets = [-0.4, 0, 0.4];
+        for (const dx of offsets) {
+          for (const dy of offsets) {
+            p.drawText(t.original, {
+              x: t.pdfX + dx,
+              y: t.pdfY + dy,
+              size: t.pdfFontSize,
+              font,
+              color: bg,
+            });
+          }
         }
+
+        // Auto-scale the new text down if it would overflow the original width
+        let size = t.pdfFontSize;
+        const origW = font.widthOfTextAtSize(t.original, size);
+        const newW = font.widthOfTextAtSize(t.current, size);
+        const budget = Math.max(t.pdfWidth, origW);
+        if (budget > 0 && newW > budget) {
+          size = Math.max(6, size * (budget / newW));
+        }
+
         p.drawText(t.current, {
           x: t.pdfX,
           y: t.pdfY,
