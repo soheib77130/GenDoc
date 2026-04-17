@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #fafbff;
+  --fg: #0f172a;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .glow-indigo { box-shadow: 0 0 60px -10px rgba(99,102,241,0.5); }
+  .glass {
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(99,102,241,0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,102,241,0.08) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .radial-fade {
+    mask-image: radial-gradient(ellipse at center, black 45%, transparent 75%);
+  }
+  .shine {
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: shine 2.4s linear infinite;
+  }
+  @keyframes shine {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 999px; }
+}
+
+/* Document preview typography */
+.doc-preview {
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.7;
+  color: #1e293b;
+}
+.doc-preview h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.04em;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #6366f1;
+  margin-bottom: 1.5rem;
+}
+.doc-preview p { margin-bottom: 0.9rem; }
+.doc-preview .footer {
+  margin-top: 2rem;
+  font-weight: 600;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 1rem;
+}

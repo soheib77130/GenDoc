@@ -1,0 +1,57 @@
+// Prisma schema for GenDoc
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime  @default(now())
+
+  // Plan info
+  plan          String    @default("free") // free | pro | business
+  planRenewsAt  DateTime?
+
+  // Monthly quotas (reset each period)
+  quotaGenUsed  Int       @default(0)
+  quotaEditUsed Int       @default(0)
+  quotaPeriodStart DateTime @default(now())
+
+  // Pay-as-you-go credits (bought à l'unité)
+  credits       Int       @default(0)
+
+  documents     Document[]
+  payments      Payment[]
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  kind        String   // "generated" | "edited"
+  category    String?  // medical, contract, rental, ...
+  templateId  String?
+  data        String?  // JSON of form data
+  fileData    String?  // base64 PDF
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String   // "subscription" | "credits" | "one-off"
+  label      String
+  amountCts  Int      // en centimes
+  status     String   @default("succeeded") // simulated
+  createdAt  DateTime @default(now())
+}
