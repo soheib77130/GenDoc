@@ -5,7 +5,10 @@ import {
   Upload, Type, Signature, Calendar, Square,
   Download, Sparkles, Lock, ChevronLeft, ChevronRight, FileText, Edit3,
 } from "lucide-react";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import {
+  PDFDocument, StandardFonts, rgb,
+  PDFName, PDFRawStream, PDFArray, decodePDFRawStream,
+} from "pdf-lib";
 import { Button } from "@/components/ui/button";
 
 /* ─── Types ──────────────────────────────────────────────────── */
@@ -165,8 +168,9 @@ export function PdfEditor({ usage }: {
           return { bg, ink };
         };
 
-        // Extract text layer
-        const tc = await page.getTextContent();
+        // Extract text layer — keep fragments un-merged so we can byte-match
+        // each piece against its source Tj operator in the content stream.
+        const tc = await page.getTextContent({ disableCombineTextItems: true });
         for (const item of tc.items as any[]) {
           if (!item.str?.trim()) continue;
           // Actual font size in PDF units (handles rotation via hypot of transform column 1)
@@ -253,20 +257,44 @@ export function PdfEditor({ usage }: {
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const scriptFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-      // 1. Apply edited text items — erase ONLY the original glyph shapes (no
-      // rectangle), then redraw. This preserves surrounding lines, boxes and
-      // colored form fields instead of masking them with a block of color.
-      for (const t of textItems.filter(t => t.edited)) {
+      // 1. Apply edited text items. Preferred path: modify the page's raw
+      // content stream so only the Tj string operand changes — same font,
+      // same color, same weight, same position, nothing else touched.
+      // Fallback (for text we can't byte-match): overlay erase + redraw.
+      const edited = textItems.filter(t => t.edited);
+      const unhandled: typeof edited = [];
+
+      // Group edits by page so we only decompress each stream once
+      const byPage = new Map<number, typeof edited>();
+      for (const t of edited) {
+        const arr = byPage.get(t.page) ?? [];
+        arr.push(t); byPage.set(t.page, arr);
+      }
+
+      byPage.forEach((items, pageNum) => {
+        const p = pdfPages[pageNum - 1];
+        if (!p) { unhandled.push(...items); return; }
+        const bytes = getPageContentBytes(p);
+        if (!bytes) { unhandled.push(...items); return; }
+
+        let buf: Uint8Array = bytes;
+        const remaining: typeof items = [];
+        for (const t of items) {
+          const replaced = replacePdfLiteralString(buf, t.original, t.current);
+          if (replaced) buf = replaced;
+          else remaining.push(t);
+        }
+        if (buf !== bytes) setPageContent(pdfDoc, p, buf);
+        unhandled.push(...remaining);
+      });
+
+      // Fallback: for items whose source string wasn't found as a literal
+      // Tj operand (hex strings, CID fonts, TJ arrays with kerning splits),
+      // fall back to erase-and-redraw.
+      for (const t of unhandled) {
         const p = pdfPages[t.page - 1];
         if (!p) continue;
-
         const bg = rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b);
-
-        // Redraw the original glyphs in the background color with a dense
-        // grid of small offsets to cover AA halos. We keep the regular font
-        // and the original size so the eraser stays within the original
-        // letter shapes — it must not grow wider than the original text,
-        // otherwise it would start covering surrounding lines/fields.
         const offsets = [-0.5, -0.25, 0, 0.25, 0.5];
         for (const dx of offsets) {
           for (const dy of offsets) {
@@ -279,8 +307,6 @@ export function PdfEditor({ usage }: {
             });
           }
         }
-
-        // Auto-scale the new text down if it would overflow the original width
         let size = t.pdfFontSize;
         const origW = font.widthOfTextAtSize(t.original, size);
         const newW = font.widthOfTextAtSize(t.current, size);
@@ -288,7 +314,6 @@ export function PdfEditor({ usage }: {
         if (budget > 0 && newW > budget) {
           size = Math.max(6, size * (budget / newW));
         }
-
         p.drawText(t.current, {
           x: t.pdfX,
           y: t.pdfY,
@@ -528,6 +553,103 @@ export function PdfEditor({ usage }: {
       </div>
     </div>
   );
+}
+
+/* ─── Content-stream byte-level text replacement ─────────────── */
+// Get the decompressed bytes of a page's content stream(s), concatenated.
+// Returns null if the page has no stream or it can't be decoded.
+function getPageContentBytes(page: any): Uint8Array | null {
+  const node = page.node;
+  const contents = node.get(PDFName.of("Contents"));
+  if (!contents) return null;
+  const streams: PDFRawStream[] = [];
+  const ctx = node.context;
+  const resolve = (ref: any) => ctx.lookup(ref);
+  if (contents instanceof PDFArray) {
+    for (let i = 0; i < contents.size(); i++) {
+      const s = resolve(contents.get(i));
+      if (s instanceof PDFRawStream) streams.push(s);
+    }
+  } else {
+    const s = resolve(contents);
+    if (s instanceof PDFRawStream) streams.push(s);
+  }
+  if (!streams.length) return null;
+  try {
+    const parts = streams.map(s => decodePDFRawStream(s).decode());
+    // Concatenate (insert a space between streams just in case)
+    let total = 0;
+    for (const p of parts) total += p.length + 1;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p of parts) {
+      out.set(p, off); off += p.length;
+      out[off++] = 0x0A;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+// Replace the page's content with a single new (compressed) stream.
+function setPageContent(pdfDoc: PDFDocument, page: any, bytes: Uint8Array) {
+  const newStream = pdfDoc.context.flateStream(bytes);
+  const ref = pdfDoc.context.register(newStream);
+  page.node.set(PDFName.of("Contents"), ref);
+}
+
+// Escape a string for use as a PDF literal `( ... )`.
+function encodePdfLiteral(s: string): Uint8Array {
+  const out: number[] = [0x28]; // (
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 0x28 || c === 0x29 || c === 0x5C) { out.push(0x5C, c); }
+    else if (c === 0x0A) { out.push(0x5C, 0x6E); }
+    else if (c === 0x0D) { out.push(0x5C, 0x72); }
+    else if (c <= 0x7F) { out.push(c); }
+    else {
+      // Encode as \nnn octal (PDFDocEncoding / WinAnsi approximation)
+      const b = c & 0xFF;
+      const s1 = (b >> 6) & 0x07, s2 = (b >> 3) & 0x07, s3 = b & 0x07;
+      out.push(0x5C, 0x30 + s1, 0x30 + s2, 0x30 + s3);
+    }
+  }
+  out.push(0x29); // )
+  return new Uint8Array(out);
+}
+
+// Build the exact byte sequence a PDF literal would have for `s`.
+function literalBytesForMatch(s: string): Uint8Array {
+  return encodePdfLiteral(s);
+}
+
+// Find a PDF literal `( s )` (with simple ASCII) inside `stream` and replace
+// it with `( r )`. Returns the new bytes, or null if not found.
+function replacePdfLiteralString(
+  stream: Uint8Array, s: string, r: string,
+): Uint8Array | null {
+  const needle = literalBytesForMatch(s);
+  const replacement = encodePdfLiteral(r);
+  const idx = indexOfBytes(stream, needle);
+  if (idx < 0) return null;
+  const out = new Uint8Array(stream.length - needle.length + replacement.length);
+  out.set(stream.subarray(0, idx), 0);
+  out.set(replacement, idx);
+  out.set(stream.subarray(idx + needle.length), idx + replacement.length);
+  return out;
+}
+
+function indexOfBytes(hay: Uint8Array, needle: Uint8Array, from = 0): number {
+  const n = needle.length;
+  if (n === 0) return from;
+  outer: for (let i = from; i <= hay.length - n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
 }
 
 /* ─── Editable text item ─────────────────────────────────────── */
