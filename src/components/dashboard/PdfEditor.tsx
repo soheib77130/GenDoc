@@ -25,6 +25,8 @@ type PdfTextItem = {
   pdfX: number; pdfY: number; pdfWidth: number; pdfFontSize: number;
   pdfPageHeight: number;
   original: string; current: string; edited: boolean;
+  // Sampled background color (0-1) to preserve colored form fields when erasing
+  bgColor: { r: number; g: number; b: number };
 };
 
 type PageImage = {
@@ -79,12 +81,66 @@ export function PdfEditor({ usage }: {
         // Render to canvas
         const canvas = document.createElement("canvas");
         canvas.width = vp.width; canvas.height = vp.height;
-        await page.render({ canvasContext: canvas.getContext("2d")!, viewport: vp, canvas }).promise;
+        const ctx = canvas.getContext("2d")!;
+        await page.render({ canvasContext: ctx, viewport: vp, canvas }).promise;
         images.push({
           page: i, dataUrl: canvas.toDataURL("image/png"),
           widthPx: vp.width, heightPx: vp.height,
           pdfWidth: vp.width / SCALE, pdfHeight: vp.height / SCALE, scale: SCALE,
         });
+
+        // Grab full image data once to sample background colors around text
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const cw = canvas.width, chh = canvas.height;
+
+        const sampleBg = (lx: number, tp: number, wd: number, fh: number) => {
+          // Sample pixels just above/below the text row and on the far left/right
+          // of a wider band. Pick the mode (most frequent non-near-black color).
+          const counts = new Map<string, { n: number; r: number; g: number; b: number }>();
+          const push = (x: number, y: number) => {
+            const xi = Math.round(x), yi = Math.round(y);
+            if (xi < 0 || yi < 0 || xi >= cw || yi >= chh) return;
+            const idx = (yi * cw + xi) * 4;
+            const r = imgData[idx], g = imgData[idx + 1], b = imgData[idx + 2];
+            // Skip dark pixels (likely ink / text / borders)
+            if (r < 60 && g < 60 && b < 60) return;
+            // Quantize to reduce noise
+            const qr = r & 0xF0, qg = g & 0xF0, qb = b & 0xF0;
+            const key = `${qr},${qg},${qb}`;
+            const cur = counts.get(key);
+            if (cur) { cur.n++; cur.r += r; cur.g += g; cur.b += b; }
+            else counts.set(key, { n: 1, r, g, b });
+          };
+          const band = Math.max(2, Math.round(fh * 0.3));
+          // Above and below text row
+          for (let d = 1; d <= band; d++) {
+            for (let x = lx; x < lx + wd; x += 2) {
+              push(x, tp - d);
+              push(x, tp + fh + d);
+            }
+          }
+          // Left and right of text
+          for (let d = 1; d <= band * 2; d++) {
+            for (let y = tp; y < tp + fh; y += 2) {
+              push(lx - d, y);
+              push(lx + wd + d, y);
+            }
+          }
+          let bestN = 0;
+          let bestR = 255, bestG = 255, bestB = 255;
+          let found = false;
+          counts.forEach(v => {
+            if (v.n > bestN) {
+              bestN = v.n; bestR = v.r; bestG = v.g; bestB = v.b; found = true;
+            }
+          });
+          if (!found || bestN < 3) return { r: 1, g: 1, b: 1 };
+          return {
+            r: (bestR / bestN) / 255,
+            g: (bestG / bestN) / 255,
+            b: (bestB / bestN) / 255,
+          };
+        };
 
         // Extract text layer
         const tc = await page.getTextContent();
@@ -98,6 +154,8 @@ export function PdfEditor({ usage }: {
           const leftPx = tx[4];
           const widthPx = item.width * SCALE;
 
+          const bg = sampleBg(leftPx, topPx, Math.max(widthPx, 10), Math.max(fontH, 6));
+
           texts.push({
             id: Math.random().toString(36).slice(2),
             page: i,
@@ -107,6 +165,7 @@ export function PdfEditor({ usage }: {
             pdfWidth: item.width, pdfFontSize: item.height || fontH / SCALE,
             pdfPageHeight: vp.height / SCALE,
             original: item.str, current: item.str, edited: false,
+            bgColor: bg,
           });
         }
       }
@@ -172,13 +231,13 @@ export function PdfEditor({ usage }: {
         const p = pdfPages[t.page - 1];
         if (!p) continue;
         const { height: ph } = p.getSize();
-        // White rectangle over original text
+        // Rectangle in sampled background color (preserves colored form fields)
         p.drawRectangle({
           x: t.pdfX - 1,
           y: t.pdfY - 2,
           width: Math.max(t.pdfWidth, t.current.length * t.pdfFontSize * 0.6) + 4,
           height: t.pdfFontSize + 4,
-          color: rgb(1, 1, 1),
+          color: rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b),
           borderWidth: 0,
         });
         // Redraw new text at same baseline
