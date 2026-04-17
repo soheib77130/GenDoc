@@ -146,10 +146,13 @@ export function PdfEditor({ usage }: {
         const tc = await page.getTextContent();
         for (const item of tc.items as any[]) {
           if (!item.str?.trim()) continue;
+          // Actual font size in PDF units (handles rotation via hypot of transform column 1)
+          const pdfFS = Math.hypot(item.transform[0], item.transform[1])
+            || item.height
+            || 10;
           // Convert PDF transform to screen coords via viewport
           const tx = pdfjs.Util.transform(vp.transform, item.transform);
-          // tx[4], tx[5] = baseline position in canvas px
-          const fontH = Math.abs(tx[0]) || Math.abs(tx[3]) || item.height * SCALE;
+          const fontH = pdfFS * SCALE;
           const topPx = tx[5] - fontH;
           const leftPx = tx[4];
           const widthPx = item.width * SCALE;
@@ -162,7 +165,7 @@ export function PdfEditor({ usage }: {
             left: leftPx, top: topPx, width: Math.max(widthPx, 10), fontSize: Math.max(fontH, 6),
             // Native PDF coords for export
             pdfX: item.transform[4], pdfY: item.transform[5],
-            pdfWidth: item.width, pdfFontSize: item.height || fontH / SCALE,
+            pdfWidth: item.width, pdfFontSize: pdfFS,
             pdfPageHeight: vp.height / SCALE,
             original: item.str, current: item.str, edited: false,
             bgColor: bg,
@@ -226,25 +229,32 @@ export function PdfEditor({ usage }: {
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const scriptFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-      // 1. Apply edited text items (white-out + rewrite)
+      // 1. Apply edited text items (erase + rewrite)
       for (const t of textItems.filter(t => t.edited)) {
         const p = pdfPages[t.page - 1];
         if (!p) continue;
-        const { height: ph } = p.getSize();
-        // Rectangle in sampled background color (preserves colored form fields)
+        // Tight erase rectangle that matches the original text bounding box.
+        // Use descent ~20% of font size below baseline, ascent = font size above.
+        const descent = t.pdfFontSize * 0.22;
+        const ascent = t.pdfFontSize * 1.02;
         p.drawRectangle({
-          x: t.pdfX - 1,
-          y: t.pdfY - 2,
-          width: Math.max(t.pdfWidth, t.current.length * t.pdfFontSize * 0.6) + 4,
-          height: t.pdfFontSize + 4,
+          x: t.pdfX - 0.5,
+          y: t.pdfY - descent,
+          width: t.pdfWidth + 1,
+          height: ascent + descent,
           color: rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b),
           borderWidth: 0,
         });
-        // Redraw new text at same baseline
+        // Auto-scale new text to fit the original width if longer
+        let size = t.pdfFontSize;
+        const measure = (s: number) => font.widthOfTextAtSize(t.current, s);
+        if (t.pdfWidth > 0 && measure(size) > t.pdfWidth) {
+          size = Math.max(6, size * (t.pdfWidth / measure(size)));
+        }
         p.drawText(t.current, {
           x: t.pdfX,
           y: t.pdfY,
-          size: Math.max(t.pdfFontSize, 6),
+          size,
           font,
           color: rgb(0.05, 0.05, 0.1),
         });
