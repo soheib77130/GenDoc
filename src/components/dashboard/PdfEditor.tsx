@@ -238,17 +238,21 @@ export function PdfEditor({ usage }: {
 
         const bg = rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b);
 
-        // Redraw the original text in the background color, with tiny offsets
-        // to cover anti-aliasing halos. This only masks the ink of the old
-        // letters, not any rectangular area around them.
-        const offsets = [-0.4, 0, 0.4];
+        // Erase the original glyphs using a slightly larger bold version of
+        // the text in the background color, rendered at many small offsets to
+        // fully cover anti-aliasing halos. This only masks the ink of the
+        // old letters, not any rectangular area around them.
+        const eraseSize = t.pdfFontSize * 1.08;
+        // Re-center vertically so the bigger eraser stays on the baseline
+        const eraseYOffset = (eraseSize - t.pdfFontSize) * 0.35;
+        const offsets = [-0.8, -0.4, 0, 0.4, 0.8];
         for (const dx of offsets) {
           for (const dy of offsets) {
             p.drawText(t.original, {
               x: t.pdfX + dx,
-              y: t.pdfY + dy,
-              size: t.pdfFontSize,
-              font,
+              y: t.pdfY + dy - eraseYOffset,
+              size: eraseSize,
+              font: boldFont,
               color: bg,
             });
           }
