@@ -25,8 +25,11 @@ type PdfTextItem = {
   pdfX: number; pdfY: number; pdfWidth: number; pdfFontSize: number;
   pdfPageHeight: number;
   original: string; current: string; edited: boolean;
-  // Sampled background color (0-1) to preserve colored form fields when erasing
+  // Sampled background + text color (0-1) — so we can erase with the right
+  // color and redraw the new text in the original ink color, whether the
+  // document uses dark-on-light or light-on-colored text.
   bgColor: { r: number; g: number; b: number };
+  textColor: { r: number; g: number; b: number };
 };
 
 type PageImage = {
@@ -93,53 +96,73 @@ export function PdfEditor({ usage }: {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const cw = canvas.width, chh = canvas.height;
 
-        const sampleBg = (lx: number, tp: number, wd: number, fh: number) => {
-          // Sample pixels just above/below the text row and on the far left/right
-          // of a wider band. Pick the mode (most frequent non-near-black color).
-          const counts = new Map<string, { n: number; r: number; g: number; b: number }>();
-          const push = (x: number, y: number) => {
+        const sampleColors = (lx: number, tp: number, wd: number, fh: number) => {
+          // Mode of pixels sampled OUTSIDE the text row (above/below) gives
+          // the true background color — regardless of whether the document
+          // is dark-on-light or light-on-colored.
+          const bgCounts = new Map<string, { n: number; r: number; g: number; b: number }>();
+          // Mode of pixels sampled INSIDE the text row, but only those far
+          // from the background color, gives the text ink color.
+          const inkCounts = new Map<string, { n: number; r: number; g: number; b: number }>();
+
+          const add = (map: Map<string, { n: number; r: number; g: number; b: number }>, r: number, g: number, b: number) => {
+            const qr = r & 0xF0, qg = g & 0xF0, qb = b & 0xF0;
+            const key = `${qr},${qg},${qb}`;
+            const cur = map.get(key);
+            if (cur) { cur.n++; cur.r += r; cur.g += g; cur.b += b; }
+            else map.set(key, { n: 1, r, g, b });
+          };
+          const pushBg = (x: number, y: number) => {
             const xi = Math.round(x), yi = Math.round(y);
             if (xi < 0 || yi < 0 || xi >= cw || yi >= chh) return;
             const idx = (yi * cw + xi) * 4;
-            const r = imgData[idx], g = imgData[idx + 1], b = imgData[idx + 2];
-            // Skip dark pixels (likely ink / text / borders)
-            if (r < 60 && g < 60 && b < 60) return;
-            // Quantize to reduce noise
-            const qr = r & 0xF0, qg = g & 0xF0, qb = b & 0xF0;
-            const key = `${qr},${qg},${qb}`;
-            const cur = counts.get(key);
-            if (cur) { cur.n++; cur.r += r; cur.g += g; cur.b += b; }
-            else counts.set(key, { n: 1, r, g, b });
+            add(bgCounts, imgData[idx], imgData[idx + 1], imgData[idx + 2]);
           };
-          const band = Math.max(2, Math.round(fh * 0.3));
-          // Above and below text row
+
+          const band = Math.max(2, Math.round(fh * 0.35));
           for (let d = 1; d <= band; d++) {
             for (let x = lx; x < lx + wd; x += 2) {
-              push(x, tp - d);
-              push(x, tp + fh + d);
+              pushBg(x, tp - d);
+              pushBg(x, tp + fh + d);
             }
           }
-          // Left and right of text
-          for (let d = 1; d <= band * 2; d++) {
+          for (let d = 1; d <= band; d++) {
             for (let y = tp; y < tp + fh; y += 2) {
-              push(lx - d, y);
-              push(lx + wd + d, y);
+              pushBg(lx - d, y);
+              pushBg(lx + wd + d, y);
             }
           }
-          let bestN = 0;
-          let bestR = 255, bestG = 255, bestB = 255;
-          let found = false;
-          counts.forEach(v => {
-            if (v.n > bestN) {
-              bestN = v.n; bestR = v.r; bestG = v.g; bestB = v.b; found = true;
-            }
+
+          // Pick bg = mode
+          let bgN = 0, bgR = 255, bgG = 255, bgB = 255;
+          bgCounts.forEach(v => {
+            if (v.n > bgN) { bgN = v.n; bgR = v.r / v.n; bgG = v.g / v.n; bgB = v.b / v.n; }
           });
-          if (!found || bestN < 3) return { r: 1, g: 1, b: 1 };
-          return {
-            r: (bestR / bestN) / 255,
-            g: (bestG / bestN) / 255,
-            b: (bestB / bestN) / 255,
-          };
+          const bg = bgN < 3
+            ? { r: 1, g: 1, b: 1 }
+            : { r: bgR / 255, g: bgG / 255, b: bgB / 255 };
+
+          // Ink = mode of pixels on the text row that are farthest from bg
+          for (let y = tp + 2; y < tp + fh - 2; y += 1) {
+            for (let x = lx; x < lx + wd; x += 1) {
+              const xi = Math.round(x), yi = Math.round(y);
+              if (xi < 0 || yi < 0 || xi >= cw || yi >= chh) continue;
+              const idx = (yi * cw + xi) * 4;
+              const r = imgData[idx], g = imgData[idx + 1], b = imgData[idx + 2];
+              const dr = r - bgR, dg = g - bgG, db = b - bgB;
+              const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+              if (dist > 90) add(inkCounts, r, g, b);
+            }
+          }
+          let inkN = 0, inkR = 0, inkG = 0, inkB = 0;
+          inkCounts.forEach(v => {
+            if (v.n > inkN) { inkN = v.n; inkR = v.r / v.n; inkG = v.g / v.n; inkB = v.b / v.n; }
+          });
+          const ink = inkN < 3
+            ? { r: 0.05, g: 0.05, b: 0.1 }
+            : { r: inkR / 255, g: inkG / 255, b: inkB / 255 };
+
+          return { bg, ink };
         };
 
         // Extract text layer
@@ -157,7 +180,7 @@ export function PdfEditor({ usage }: {
           const leftPx = tx[4];
           const widthPx = item.width * SCALE;
 
-          const bg = sampleBg(leftPx, topPx, Math.max(widthPx, 10), Math.max(fontH, 6));
+          const { bg, ink } = sampleColors(leftPx, topPx, Math.max(widthPx, 10), Math.max(fontH, 6));
 
           texts.push({
             id: Math.random().toString(36).slice(2),
@@ -169,6 +192,7 @@ export function PdfEditor({ usage }: {
             pdfPageHeight: vp.height / SCALE,
             original: item.str, current: item.str, edited: false,
             bgColor: bg,
+            textColor: ink,
           });
         }
       }
@@ -270,7 +294,7 @@ export function PdfEditor({ usage }: {
           y: t.pdfY,
           size,
           font,
-          color: rgb(0.05, 0.05, 0.1),
+          color: rgb(t.textColor.r, t.textColor.g, t.textColor.b),
         });
       }
 
