@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFName, StandardFonts, rgb } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 
@@ -75,11 +75,26 @@ export async function fillPdfFormTemplate(
     }
   }
 
-  // Remove interactive form layer so viewers don't show empty overlapping fields.
+  // Aggressively strip the interactive form layer so viewers can't render
+  // empty widget appearances on top of the text we just drew. flatten()
+  // sometimes fails on XFA-origin PDFs, so we also explicitly remove the
+  // AcroForm catalog entry and per-page Annots.
   try {
     form.flatten();
   } catch {
-    // If flatten fails, the drawn text is still visible underneath.
+    // ignore — the explicit cleanup below handles it
+  }
+  try {
+    pdf.catalog.delete(PDFName.of("AcroForm"));
+  } catch {
+    // ignore
+  }
+  for (const p of pages) {
+    try {
+      p.node.delete(PDFName.of("Annots"));
+    } catch {
+      // ignore
+    }
   }
 
   return pdf.save();
