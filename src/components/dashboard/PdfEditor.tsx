@@ -1,9 +1,10 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload, Type, Signature, Calendar, Square,
   Download, Sparkles, Lock, ChevronLeft, ChevronRight, FileText, Edit3,
+  Bold, Minus, Plus, Palette, Move, X,
 } from "lucide-react";
 import {
   PDFDocument, StandardFonts, rgb,
@@ -33,6 +34,14 @@ type PdfTextItem = {
   // document uses dark-on-light or light-on-colored text.
   bgColor: { r: number; g: number; b: number };
   textColor: { r: number; g: number; b: number };
+  // Format overrides — any of these triggers overlay-based rendering on
+  // export (erase original + redraw with new format). When all are at their
+  // defaults, a pure content-stream byte swap is used instead.
+  bold: boolean;
+  sizeMul: number;                                    // 1 = original size
+  colorOverride: { r: number; g: number; b: number } | null;
+  offsetX: number;                                    // PDF units
+  offsetY: number;                                    // PDF units
 };
 
 type PageImage = {
@@ -63,6 +72,8 @@ export function PdfEditor({ usage }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // Id of the text item whose toolbar is open (Sejda-like floating bar)
+  const [activeTextId, setActiveTextId] = useState<string | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
 
   /* ── Load PDF ── */
@@ -197,6 +208,7 @@ export function PdfEditor({ usage }: {
             original: item.str, current: item.str, edited: false,
             bgColor: bg,
             textColor: ink,
+            bold: false, sizeMul: 1, colorOverride: null, offsetX: 0, offsetY: 0,
           });
         }
       }
@@ -213,11 +225,21 @@ export function PdfEditor({ usage }: {
   }
 
   /* ── Text item edit ── */
-  function updateText(id: string, val: string) {
-    setTextItems(all => all.map(t =>
-      t.id === id ? { ...t, current: val, edited: val !== t.original } : t
-    ));
+  function patchText(id: string, patch: Partial<PdfTextItem>) {
+    setTextItems(all => all.map(t => {
+      if (t.id !== id) return t;
+      const next = { ...t, ...patch };
+      next.edited =
+        next.current !== next.original
+        || next.bold
+        || next.sizeMul !== 1
+        || next.colorOverride != null
+        || next.offsetX !== 0
+        || next.offsetY !== 0;
+      return next;
+    }));
   }
+  function updateText(id: string, val: string) { patchText(id, { current: val }); }
 
   /* ── Add annotation (annotate mode) ── */
   function addOverlayAt(e: React.MouseEvent<HTMLDivElement>) {
@@ -257,26 +279,32 @@ export function PdfEditor({ usage }: {
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const scriptFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-      // 1. Apply edited text items. Only path: modify the page's raw content
-      // stream so nothing but the text bytes changes. If an edit can't be
-      // applied (text fragment not matchable in the stream), skip it — we
-      // don't fall back to any overlay so we never alter visuals around.
+      // 1. Apply edited text items. Two paths:
+      //    a) pure text change, no format override → content-stream byte swap
+      //       (preserves font, color, weight, position exactly)
+      //    b) format override (bold, size, color, position) → overlay: erase
+      //       original glyphs in the sampled bg color and redraw with the
+      //       requested format.
       const edited = textItems.filter(t => t.edited);
       const skipped: string[] = [];
 
-      // Group edits by page so we only decompress each stream once
-      const byPage = new Map<number, typeof edited>();
-      for (const t of edited) {
+      const hasFmt = (t: PdfTextItem) =>
+        t.bold || t.sizeMul !== 1 || t.colorOverride != null || t.offsetX !== 0 || t.offsetY !== 0;
+
+      const streamPath = edited.filter(t => !hasFmt(t));
+      const overlayPath = edited.filter(t => hasFmt(t));
+
+      // Path A: content-stream replacement, grouped by page
+      const byPage = new Map<number, typeof streamPath>();
+      for (const t of streamPath) {
         const arr = byPage.get(t.page) ?? [];
         arr.push(t); byPage.set(t.page, arr);
       }
-
       byPage.forEach((items, pageNum) => {
         const p = pdfPages[pageNum - 1];
         if (!p) { items.forEach(t => skipped.push(t.original)); return; }
         const bytes = getPageContentBytes(p);
         if (!bytes) { items.forEach(t => skipped.push(t.original)); return; }
-
         let buf: Uint8Array = bytes;
         for (const t of items) {
           const replaced = replacePdfString(buf, t.original, t.current);
@@ -285,6 +313,39 @@ export function PdfEditor({ usage }: {
         }
         if (buf !== bytes) setPageContent(pdfDoc, p, buf);
       });
+
+      // Path B: overlay (needed whenever user changed format/position)
+      for (const t of overlayPath) {
+        const p = pdfPages[t.page - 1];
+        if (!p) continue;
+        const bg = rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b);
+        const chosenFont = t.bold ? boldFont : font;
+        const size = t.pdfFontSize * t.sizeMul;
+        const color = t.colorOverride
+          ? rgb(t.colorOverride.r, t.colorOverride.g, t.colorOverride.b)
+          : rgb(t.textColor.r, t.textColor.g, t.textColor.b);
+
+        // Erase original glyphs (5x5 dense grid, regular font, original size)
+        const offsets = [-0.5, -0.25, 0, 0.25, 0.5];
+        for (const dx of offsets) {
+          for (const dy of offsets) {
+            p.drawText(t.original, {
+              x: t.pdfX + dx,
+              y: t.pdfY + dy,
+              size: t.pdfFontSize,
+              font,
+              color: bg,
+            });
+          }
+        }
+        p.drawText(t.current, {
+          x: t.pdfX + t.offsetX,
+          y: t.pdfY + t.offsetY,
+          size,
+          font: chosenFont,
+          color,
+        });
+      }
 
       // 2. Apply annotation overlays (existing feature)
       const page0 = pdfPages[0];
@@ -501,8 +562,30 @@ export function PdfEditor({ usage }: {
 
               {/* Editable text items */}
               {pageTexts.map(t => (
-                <EditableTextItem key={t.id} item={t} onChange={val => updateText(t.id, val)} />
+                <EditableTextItem
+                  key={t.id}
+                  item={t}
+                  scale={page.scale}
+                  active={activeTextId === t.id}
+                  onActivate={() => setActiveTextId(t.id)}
+                  onDeactivate={() => setActiveTextId(a => a === t.id ? null : a)}
+                  onPatch={p => patchText(t.id, p)}
+                />
               ))}
+
+              {/* Floating toolbar for the active text item */}
+              {activeTextId && (() => {
+                const active = pageTexts.find(t => t.id === activeTextId);
+                if (!active) return null;
+                return (
+                  <TextToolbar
+                    item={active}
+                    scale={page.scale}
+                    onPatch={p => patchText(active.id, p)}
+                    onClose={() => setActiveTextId(null)}
+                  />
+                );
+              })()}
 
               {/* Annotation overlays */}
               {overlays.filter(o => o.page === currentPage + 1).map(o => (
@@ -765,41 +848,86 @@ function indexOfBytes(hay: Uint8Array, needle: Uint8Array, from = 0): number {
 }
 
 /* ─── Editable text item ─────────────────────────────────────── */
-function EditableTextItem({ item, onChange }: {
+function EditableTextItem({ item, scale, active, onActivate, onDeactivate, onPatch }: {
   item: PdfTextItem;
-  onChange: (v: string) => void;
+  scale: number;
+  active: boolean;
+  onActivate: () => void;
+  onDeactivate: () => void;
+  onPatch: (p: Partial<PdfTextItem>) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Deactivate on outside click
+  useEffect(() => {
+    if (!active) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("[data-textitem='" + item.id + "']")) return;
+      if (el?.closest("[data-toolbar='" + item.id + "']")) return;
+      setEditing(false);
+      onDeactivate();
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [active, item.id, onDeactivate]);
+
   function startEdit(e: React.MouseEvent) {
     e.stopPropagation();
+    onActivate();
     setEditing(true);
     setTimeout(() => inputRef.current?.select(), 0);
   }
-
   function commit(v: string) {
     setEditing(false);
-    onChange(v);
+    onPatch({ current: v });
   }
+
+  // Visual style computed from current overrides (so the live preview
+  // matches what export will produce).
+  const fontWeight = item.bold ? 700 : 400;
+  const dispSize = item.fontSize * item.sizeMul;
+  const dispLeft = item.left + item.offsetX * scale;
+  const dispTop = item.top + -item.offsetY * scale; // PDF y grows up, CSS down
+  const ringClass = active
+    ? "ring-2 ring-indigo-500 bg-indigo-50/40 rounded"
+    : item.edited
+      ? "ring-1 ring-indigo-400 bg-indigo-50/30 rounded"
+      : "hover:ring-1 hover:ring-indigo-300 hover:bg-blue-50/30 hover:rounded";
+
+  // If the item has format overrides, we must paint the new text over the
+  // original image (and hide the original glyphs by using a bg-colored
+  // span), otherwise we keep the span transparent so the underlying canvas
+  // image shows the original unaltered.
+  const showsOverride =
+    item.bold || item.sizeMul !== 1 || item.colorOverride != null
+    || item.offsetX !== 0 || item.offsetY !== 0;
+  const dispColor = item.colorOverride
+    ? `rgb(${Math.round(item.colorOverride.r * 255)}, ${Math.round(item.colorOverride.g * 255)}, ${Math.round(item.colorOverride.b * 255)})`
+    : `rgb(${Math.round(item.textColor.r * 255)}, ${Math.round(item.textColor.g * 255)}, ${Math.round(item.textColor.b * 255)})`;
+  const bgCss = `rgb(${Math.round(item.bgColor.r * 255)}, ${Math.round(item.bgColor.g * 255)}, ${Math.round(item.bgColor.b * 255)})`;
 
   return (
     <div
+      data-textitem={item.id}
       onClick={startEdit}
       style={{
         position: "absolute",
-        left: item.left,
-        top: item.top,
-        width: item.width + 8,
+        left: dispLeft,
+        top: dispTop,
+        width: Math.max(item.width, dispSize * item.current.length * 0.6) + 8,
         minWidth: 20,
-        height: item.fontSize + 4,
-        fontSize: item.fontSize,
+        height: dispSize + 4,
+        fontSize: dispSize,
         lineHeight: 1,
         cursor: "text",
         fontFamily: "Helvetica, Arial, sans-serif",
-        zIndex: 10,
+        fontWeight,
+        zIndex: active ? 30 : 10,
+        background: showsOverride ? bgCss : undefined,
       }}
-      className={`group ${item.edited ? "ring-1 ring-indigo-400 ring-offset-0 bg-indigo-50/40 rounded" : "hover:ring-1 hover:ring-indigo-300 hover:bg-blue-50/30 hover:rounded"}`}
+      className={`group ${ringClass}`}
       title={editing ? undefined : "Cliquer pour modifier"}
     >
       {editing ? (
@@ -815,7 +943,8 @@ function EditableTextItem({ item, onChange }: {
           style={{
             width: "100%", border: "none", outline: "none",
             background: "rgba(238,242,255,0.9)",
-            fontSize: item.fontSize, fontFamily: "Helvetica, Arial, sans-serif",
+            fontSize: dispSize, fontWeight,
+            fontFamily: "Helvetica, Arial, sans-serif",
             lineHeight: 1, padding: 0, margin: 0, color: "#0f172a",
             boxShadow: "0 0 0 2px #6366f1",
             borderRadius: 2,
@@ -824,12 +953,121 @@ function EditableTextItem({ item, onChange }: {
       ) : (
         <span style={{
           display: "block", whiteSpace: "pre",
-          color: item.edited ? "#4338ca" : "transparent",
+          color: showsOverride
+            ? dispColor
+            : (item.edited ? "#4338ca" : "transparent"),
           overflow: "visible",
         }}>
           {item.current}
         </span>
       )}
+    </div>
+  );
+}
+
+/* ─── Floating text toolbar (Sejda-like) ─────────────────────── */
+function TextToolbar({ item, scale, onPatch, onClose }: {
+  item: PdfTextItem;
+  scale: number;
+  onPatch: (p: Partial<PdfTextItem>) => void;
+  onClose: () => void;
+}) {
+  const colors: { label: string; rgb: [number, number, number] }[] = [
+    { label: "Noir", rgb: [0.1, 0.1, 0.12] },
+    { label: "Bleu", rgb: [0.13, 0.28, 0.82] },
+    { label: "Rouge", rgb: [0.75, 0.12, 0.14] },
+    { label: "Vert", rgb: [0.10, 0.50, 0.30] },
+    { label: "Orange", rgb: [0.90, 0.50, 0.10] },
+    { label: "Blanc", rgb: [1, 1, 1] },
+  ];
+  const [openColor, setOpenColor] = useState(false);
+
+  // Position: above the item, clamped so it stays inside the page area
+  const top = Math.max(0, item.top - 48);
+  const left = Math.max(0, item.left);
+
+  return (
+    <div
+      data-toolbar={item.id}
+      onClick={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
+      style={{ position: "absolute", left, top, zIndex: 100 }}
+      className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-lg shadow-slate-900/10 backdrop-blur"
+    >
+      <button
+        onClick={() => onPatch({ bold: !item.bold })}
+        className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold transition ${item.bold ? "bg-indigo-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+        title="Gras"
+      ><Bold className="h-3.5 w-3.5" /></button>
+
+      <div className="mx-0.5 h-5 w-px bg-slate-200" />
+
+      <button
+        onClick={() => onPatch({ sizeMul: Math.max(0.4, item.sizeMul - 0.1) })}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+        title="Réduire la taille"
+      ><Minus className="h-3.5 w-3.5" /></button>
+      <span className="min-w-[2.5rem] text-center text-xs tabular-nums text-slate-600">
+        {Math.round(item.fontSize * item.sizeMul / scale * 10) / 10}
+      </span>
+      <button
+        onClick={() => onPatch({ sizeMul: Math.min(3, item.sizeMul + 0.1) })}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+        title="Agrandir"
+      ><Plus className="h-3.5 w-3.5" /></button>
+
+      <div className="mx-0.5 h-5 w-px bg-slate-200" />
+
+      <div className="relative">
+        <button
+          onClick={() => setOpenColor(o => !o)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+          title="Couleur"
+        ><Palette className="h-3.5 w-3.5" /></button>
+        {openColor && (
+          <div className="absolute top-full left-0 mt-1 flex gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+            {colors.map(c => (
+              <button key={c.label} title={c.label}
+                onClick={() => { onPatch({ colorOverride: { r: c.rgb[0], g: c.rgb[1], b: c.rgb[2] } }); setOpenColor(false); }}
+                className="h-5 w-5 rounded border border-slate-200 hover:scale-110 transition"
+                style={{ background: `rgb(${c.rgb[0]*255},${c.rgb[1]*255},${c.rgb[2]*255})` }}
+              />
+            ))}
+            <button title="Original"
+              onClick={() => { onPatch({ colorOverride: null }); setOpenColor(false); }}
+              className="h-5 w-5 rounded border border-slate-300 bg-gradient-to-br from-white to-slate-200"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mx-0.5 h-5 w-px bg-slate-200" />
+
+      <div className="flex items-center gap-0.5" title="Déplacer">
+        <Move className="h-3 w-3 text-slate-400" />
+        <button onClick={() => onPatch({ offsetX: item.offsetX - 1 })}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 text-xs">←</button>
+        <button onClick={() => onPatch({ offsetY: item.offsetY + 1 })}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 text-xs">↑</button>
+        <button onClick={() => onPatch({ offsetY: item.offsetY - 1 })}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 text-xs">↓</button>
+        <button onClick={() => onPatch({ offsetX: item.offsetX + 1 })}
+          className="flex h-6 w-6 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 text-xs">→</button>
+      </div>
+
+      <div className="mx-0.5 h-5 w-px bg-slate-200" />
+
+      <button
+        onClick={() => onPatch({ bold: false, sizeMul: 1, colorOverride: null, offsetX: 0, offsetY: 0 })}
+        className="h-7 px-2 rounded-md text-[11px] text-slate-600 hover:bg-slate-100"
+        title="Réinitialiser la mise en forme"
+      >Reset</button>
+
+      <button
+        onClick={onClose}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+        title="Fermer"
+      ><X className="h-3.5 w-3.5" /></button>
     </div>
   );
 }
