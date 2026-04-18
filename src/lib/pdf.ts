@@ -43,10 +43,35 @@ export async function fillPdfFormTemplate(
   // nothing that can hide the values we draw on top.
   const out = await PDFDocument.create();
   const font = await out.embedFont(StandardFonts.Helvetica);
+  const bold = await out.embedFont(StandardFonts.HelveticaBold);
   const image = await out.embedPng(pngBytes);
   const page = out.addPage([pageWidth, pageHeight]);
   page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
 
+  const valueCount = Object.values(values).filter(
+    (v) => v != null && v !== "" && v !== false
+  ).length;
+  const fieldsKnown = fieldMeta.size;
+  const stamp = new Date().toISOString().slice(0, 19);
+  page.drawRectangle({
+    x: 0,
+    y: pageHeight - 18,
+    width: pageWidth,
+    height: 18,
+    color: rgb(1, 1, 0),
+  });
+  page.drawText(
+    `GENDOC v10 — values=${valueCount} fields=${fieldsKnown} ${stamp}`,
+    {
+      x: 4,
+      y: pageHeight - 14,
+      size: 10,
+      font: bold,
+      color: rgb(0.8, 0, 0),
+    }
+  );
+
+  let drawn = 0;
   for (const [name, raw] of Object.entries(values)) {
     if (raw == null || raw === "") continue;
     const meta = fieldMeta.get(name);
@@ -64,6 +89,7 @@ export async function fillPdfFormTemplate(
           color: rgb(0, 0, 0),
           maxWidth: r.width - 2,
         });
+        drawn++;
       } else if (type === "PDFCheckBox") {
         const checked =
           raw === true || raw === "true" || raw === "oui" || raw === "X";
@@ -83,12 +109,21 @@ export async function fillPdfFormTemplate(
             thickness: 2,
             color: rgb(0, 0, 0),
           });
+          drawn++;
         }
       }
     } catch {
       // Continue on individual draw failure.
     }
   }
+
+  page.drawText(`drawn=${drawn}`, {
+    x: pageWidth - 90,
+    y: pageHeight - 14,
+    size: 10,
+    font: bold,
+    color: rgb(0.8, 0, 0),
+  });
 
   return out.save();
 }
