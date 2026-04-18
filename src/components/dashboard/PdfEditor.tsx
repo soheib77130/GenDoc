@@ -29,6 +29,11 @@ type PdfTextItem = {
   pdfX: number; pdfY: number; pdfWidth: number; pdfFontSize: number;
   pdfPageHeight: number;
   original: string; current: string; edited: boolean;
+  // Index among items on the same page that share the same `original` text,
+  // assigned in stream order. Critical: when the user edits one of several
+  // "et" or "le", we must replace the right occurrence in the content
+  // stream — not the first one found.
+  occurrenceIndex: number;
   // Sampled background + text color (0-1) — so we can erase with the right
   // color and redraw the new text in the original ink color, whether the
   // document uses dark-on-light or light-on-colored text.
@@ -206,11 +211,21 @@ export function PdfEditor({ usage }: {
             pdfWidth: item.width, pdfFontSize: pdfFS,
             pdfPageHeight: vp.height / SCALE,
             original: item.str, current: item.str, edited: false,
+            occurrenceIndex: 0, // assigned right after the loop
             bgColor: bg,
             textColor: ink,
             bold: false, sizeMul: 1, colorOverride: null, offsetX: 0, offsetY: 0,
           });
         }
+      }
+      // Assign per-page occurrence indices so that duplicates can be
+      // disambiguated when rewriting the content stream.
+      const occCounts = new Map<string, number>();
+      for (const t of texts) {
+        const key = `${t.page}::${t.original}`;
+        const n = occCounts.get(key) ?? 0;
+        t.occurrenceIndex = n;
+        occCounts.set(key, n + 1);
       }
       setPages(images); setTextItems(texts);
     } catch (e) {
@@ -305,13 +320,43 @@ export function PdfEditor({ usage }: {
         if (!p) { items.forEach(t => skipped.push(t.original)); return; }
         const bytes = getPageContentBytes(p);
         if (!bytes) { items.forEach(t => skipped.push(t.original)); return; }
-        let buf: Uint8Array = bytes;
+
+        // Group by `original`; for each group, find ALL occurrence positions
+        // in the stream once (in any of the supported forms) and apply the
+        // edits in DESCENDING position order so earlier offsets don't shift.
+        const byOrig = new Map<string, typeof items>();
         for (const t of items) {
-          const replaced = replacePdfString(buf, t.original, t.current);
-          if (replaced) buf = replaced;
-          else skipped.push(t.original);
+          const arr = byOrig.get(t.original) ?? [];
+          arr.push(t); byOrig.set(t.original, arr);
         }
-        if (buf !== bytes) setPageContent(pdfDoc, p, buf);
+
+        type Plan = { start: number; end: number; repl: Uint8Array; t: PdfTextItem };
+        const plans: Plan[] = [];
+
+        byOrig.forEach((group, orig) => {
+          // Try literal form first; fall back to hex/UTF-16/TJ if needed.
+          // For each form we get the list of (start,end) ranges.
+          const ranges = findAllOccurrencesAnyForm(bytes, orig);
+          if (!ranges) { group.forEach(t => skipped.push(t.original)); return; }
+          for (const t of group) {
+            const r = ranges.list[t.occurrenceIndex];
+            if (!r) { skipped.push(t.original); continue; }
+            const repl = ranges.encode(t.current);
+            plans.push({ start: r.start, end: r.end, repl, t });
+          }
+        });
+
+        if (!plans.length) return;
+        plans.sort((a, b) => b.start - a.start); // right-to-left
+        let buf = bytes;
+        for (const pl of plans) {
+          const out = new Uint8Array(buf.length - (pl.end - pl.start) + pl.repl.length);
+          out.set(buf.subarray(0, pl.start), 0);
+          out.set(pl.repl, pl.start);
+          out.set(buf.subarray(pl.end), pl.start + pl.repl.length);
+          buf = out;
+        }
+        setPageContent(pdfDoc, p, buf);
       });
 
       // Path B: overlay (needed whenever user changed format/position)
@@ -692,9 +737,133 @@ function replacePdfLiteralString(
   return out;
 }
 
-// Try every supported form in turn: literal `(s)`, hex `<HHHH>`
-// (1-byte WinAnsi and 2-byte UTF-16BE / Identity-H), and TJ arrays whose
-// string operands concatenate to `s`.
+// Find every (start,end) range that holds the source string `s` in the
+// stream, across all supported encodings. Returns the list AND an encoder
+// that produces the bytes for the replacement in the same form, so the
+// caller can splice without changing the surrounding operators.
+function findAllOccurrencesAnyForm(
+  stream: Uint8Array, s: string,
+): { list: { start: number; end: number }[]; encode: (r: string) => Uint8Array } | null {
+  // 1. Literal form
+  {
+    const needle = literalBytesForMatch(s);
+    const list = findAllRanges(stream, needle);
+    if (list.length) return { list, encode: (r) => encodePdfLiteral(r) };
+  }
+  // 2. Hex 1-byte
+  {
+    const needle = hexBytes(s, false);
+    if (needle.length > 2) {
+      const list = findAllRanges(stream, needle);
+      if (list.length) return { list, encode: (r) => hexBytes(r, false) };
+    }
+  }
+  // 3. Hex 2-byte (Identity-H)
+  {
+    const needle = hexBytes(s, true);
+    if (needle.length > 2) {
+      const list = findAllRanges(stream, needle);
+      if (list.length) return { list, encode: (r) => hexBytes(r, true) };
+    }
+  }
+  // 4. TJ arrays whose concatenated content equals s
+  const tj = findAllTJArrays(stream, s);
+  if (tj.length) {
+    return {
+      list: tj,
+      encode: (r) => {
+        // Replace the whole "[...] TJ" with "(r) Tj"
+        const lit = encodePdfLiteral(r);
+        const out = new Uint8Array(lit.length + 3);
+        out.set(lit, 0);
+        out[lit.length] = 0x20; out[lit.length + 1] = 0x54; out[lit.length + 2] = 0x6A;
+        return out;
+      },
+    };
+  }
+  return null;
+}
+
+function findAllRanges(hay: Uint8Array, needle: Uint8Array): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  if (needle.length === 0) return out;
+  let i = 0;
+  while (i <= hay.length - needle.length) {
+    let match = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) { match = false; break; }
+    }
+    if (match) {
+      out.push({ start: i, end: i + needle.length });
+      i += needle.length;
+    } else {
+      i++;
+    }
+  }
+  return out;
+}
+
+function findAllTJArrays(stream: Uint8Array, s: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  let i = 0;
+  while (i < stream.length) {
+    if (stream[i] !== 0x5B) { i++; continue; }
+    const start = i;
+    i++;
+    let content = "";
+    while (i < stream.length && stream[i] !== 0x5D) {
+      const c = stream[i];
+      if (c === 0x28) {
+        let j = i + 1, depth = 1, text = "";
+        while (j < stream.length && depth > 0) {
+          const cc = stream[j];
+          if (cc === 0x5C && j + 1 < stream.length) {
+            const esc = stream[j + 1];
+            if (esc === 0x6E) { text += "\n"; j += 2; }
+            else if (esc === 0x72) { text += "\r"; j += 2; }
+            else if (esc === 0x74) { text += "\t"; j += 2; }
+            else if (esc >= 0x30 && esc <= 0x37) {
+              let oct = esc - 0x30, k = j + 2;
+              while (k < j + 4 && stream[k] >= 0x30 && stream[k] <= 0x37) {
+                oct = oct * 8 + (stream[k] - 0x30); k++;
+              }
+              text += String.fromCharCode(oct & 0xFF);
+              j = k;
+            } else { text += String.fromCharCode(esc); j += 2; }
+          } else if (cc === 0x28) { depth++; text += "("; j++; }
+          else if (cc === 0x29) { depth--; if (depth > 0) text += ")"; j++; }
+          else { text += String.fromCharCode(cc); j++; }
+        }
+        content += text;
+        i = j;
+      } else if (c === 0x3C) {
+        let j = i + 1, hex = "";
+        while (j < stream.length && stream[j] !== 0x3E) {
+          const cc = stream[j];
+          if ((cc >= 0x30 && cc <= 0x39) || (cc >= 0x41 && cc <= 0x46) || (cc >= 0x61 && cc <= 0x66)) hex += String.fromCharCode(cc);
+          j++;
+        }
+        if (hex.length % 2) hex += "0";
+        for (let k = 0; k < hex.length; k += 2) content += String.fromCharCode(parseInt(hex.substr(k, 2), 16));
+        i = j + 1;
+      } else { i++; }
+    }
+    if (i >= stream.length) return out;
+    const endBracket = i;
+    let k = endBracket + 1;
+    while (k < stream.length && (stream[k] === 0x20 || stream[k] === 0x0A || stream[k] === 0x0D || stream[k] === 0x09)) k++;
+    if (k + 1 < stream.length && stream[k] === 0x54 && stream[k + 1] === 0x4A) {
+      const afterTJ = k + 2;
+      if (content === s) out.push({ start, end: afterTJ });
+      i = afterTJ;
+    } else {
+      i = endBracket + 1;
+    }
+  }
+  return out;
+}
+
+// (kept for backwards-compat — unused after the new planner)
 function replacePdfString(stream: Uint8Array, s: string, r: string): Uint8Array | null {
   // 1. Plain literal
   const lit = replacePdfLiteralString(stream, s, r);
