@@ -21,9 +21,11 @@ export async function fillPdfFormTemplate(
   const pdf = await PDFDocument.load(src);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const form = pdf.getForm();
+  const pages = pdf.getPages();
 
   for (const [name, raw] of Object.entries(values)) {
     if (raw == null || raw === "") continue;
+
     const field = (() => {
       try {
         return form.getField(name);
@@ -32,28 +34,53 @@ export async function fillPdfFormTemplate(
       }
     })();
     if (!field) continue;
-    const type = field.constructor.name;
-    try {
-      if (type === "PDFTextField") {
-        const tf = form.getTextField(name);
-        tf.setText(String(raw));
-        tf.updateAppearances(font);
-      } else if (type === "PDFCheckBox") {
-        const cb = form.getCheckBox(name);
-        if (raw === true || raw === "true" || raw === "oui" || raw === "X") cb.check();
-        else cb.uncheck();
-        cb.updateAppearances();
-      } else if (type === "PDFDropdown") {
-        form.getDropdown(name).select(String(raw));
-      } else if (type === "PDFRadioGroup") {
-        form.getRadioGroup(name).select(String(raw));
+
+    const widgets = field.acroField.getWidgets();
+    if (widgets.length === 0) continue;
+
+    for (const widget of widgets) {
+      const r = widget.getRectangle();
+      if (r.width === 0 || r.height === 0) continue;
+
+      // This CERFA is single-page — always draw on page 0.
+      const page = pages[0];
+
+      const type = field.constructor.name;
+      try {
+        if (type === "PDFTextField") {
+          const fontSize = Math.min(8, r.height - 2);
+          const text = String(raw);
+          page.drawText(text, {
+            x: r.x + 1,
+            y: r.y + (r.height - fontSize) / 2,
+            size: fontSize,
+            font,
+            color: rgb(0, 0, 0),
+            maxWidth: r.width - 2,
+          });
+        } else if (type === "PDFCheckBox") {
+          const checked =
+            raw === true || raw === "true" || raw === "oui" || raw === "X";
+          if (checked) {
+            const cx = r.x + r.width / 2;
+            const cy = r.y + r.height / 2;
+            const s = Math.min(r.width, r.height) * 0.5;
+            page.drawLine({ start: { x: cx - s, y: cy - s }, end: { x: cx + s, y: cy + s }, thickness: 1.5, color: rgb(0, 0, 0) });
+            page.drawLine({ start: { x: cx + s, y: cy - s }, end: { x: cx - s, y: cy + s }, thickness: 1.5, color: rgb(0, 0, 0) });
+          }
+        }
+      } catch {
+        // Continue on individual draw failure.
       }
-    } catch {
-      // Ignore individual field failures — keep partial progress.
     }
   }
 
-  form.flatten();
+  // Remove interactive form layer so viewers don't show empty overlapping fields.
+  try {
+    form.flatten();
+  } catch {
+    // If flatten fails, the drawn text is still visible underneath.
+  }
 
   return pdf.save();
 }
