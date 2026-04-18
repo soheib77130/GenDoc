@@ -18,86 +18,81 @@ export async function fillPdfFormTemplate(
     ? templatePath
     : path.join(process.cwd(), templatePath);
   const src = fs.readFileSync(abs);
-  const pdf = await PDFDocument.load(src);
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const form = pdf.getForm();
-  const pages = pdf.getPages();
 
-  for (const [name, raw] of Object.entries(values)) {
-    if (raw == null || raw === "") continue;
-
-    const field = (() => {
-      try {
-        return form.getField(name);
-      } catch {
-        return null;
-      }
-    })();
-    if (!field) continue;
-
-    const widgets = field.acroField.getWidgets();
+  // Load the original template only to inspect widget positions.
+  const original = await PDFDocument.load(src);
+  const origForm = original.getForm();
+  const fieldMeta = new Map<
+    string,
+    { rect: { x: number; y: number; width: number; height: number }; type: string }
+  >();
+  for (const f of origForm.getFields()) {
+    const widgets = f.acroField.getWidgets();
     if (widgets.length === 0) continue;
-
-    for (const widget of widgets) {
-      const r = widget.getRectangle();
-      if (r.width === 0 || r.height === 0) continue;
-
-      // This CERFA is single-page — always draw on page 0.
-      const page = pages[0];
-
-      const type = field.constructor.name;
-      try {
-        if (type === "PDFTextField") {
-          const fontSize = Math.min(8, r.height - 2);
-          const text = String(raw);
-          page.drawText(text, {
-            x: r.x + 1,
-            y: r.y + (r.height - fontSize) / 2,
-            size: fontSize,
-            font,
-            color: rgb(0, 0, 0),
-            maxWidth: r.width - 2,
-          });
-        } else if (type === "PDFCheckBox") {
-          const checked =
-            raw === true || raw === "true" || raw === "oui" || raw === "X";
-          if (checked) {
-            const cx = r.x + r.width / 2;
-            const cy = r.y + r.height / 2;
-            const s = Math.min(r.width, r.height) * 0.5;
-            page.drawLine({ start: { x: cx - s, y: cy - s }, end: { x: cx + s, y: cy + s }, thickness: 1.5, color: rgb(0, 0, 0) });
-            page.drawLine({ start: { x: cx + s, y: cy - s }, end: { x: cx - s, y: cy + s }, thickness: 1.5, color: rgb(0, 0, 0) });
-          }
-        }
-      } catch {
-        // Continue on individual draw failure.
-      }
-    }
+    const r = widgets[0].getRectangle();
+    fieldMeta.set(f.getName(), { rect: r, type: f.constructor.name });
   }
 
-  // Aggressively strip the interactive form layer so viewers can't render
-  // empty widget appearances on top of the text we just drew. flatten()
-  // sometimes fails on XFA-origin PDFs, so we also explicitly remove the
-  // AcroForm catalog entry and per-page Annots.
+  // Build a fresh PDF that has the template page as a static background,
+  // then draw user values directly onto it. This bypasses every XFA,
+  // AcroForm and widget-appearance issue.
+  const out = await PDFDocument.create();
+  const font = await out.embedFont(StandardFonts.Helvetica);
+  const [copiedPage] = await out.copyPages(original, [0]);
+  out.addPage(copiedPage);
+  const page = out.getPages()[0];
+
+  // Strip any widget annotations that were copied along with the page.
   try {
-    form.flatten();
-  } catch {
-    // ignore — the explicit cleanup below handles it
-  }
-  try {
-    pdf.catalog.delete(PDFName.of("AcroForm"));
+    page.node.delete(PDFName.of("Annots"));
   } catch {
     // ignore
   }
-  for (const p of pages) {
+
+  for (const [name, raw] of Object.entries(values)) {
+    if (raw == null || raw === "") continue;
+    const meta = fieldMeta.get(name);
+    if (!meta) continue;
+    const { rect: r, type } = meta;
+    if (r.width === 0 || r.height === 0) continue;
     try {
-      p.node.delete(PDFName.of("Annots"));
+      if (type === "PDFTextField") {
+        const fontSize = Math.min(8, r.height - 2);
+        page.drawText(String(raw), {
+          x: r.x + 1,
+          y: r.y + (r.height - fontSize) / 2,
+          size: fontSize,
+          font,
+          color: rgb(0, 0, 0),
+          maxWidth: r.width - 2,
+        });
+      } else if (type === "PDFCheckBox") {
+        const checked =
+          raw === true || raw === "true" || raw === "oui" || raw === "X";
+        if (checked) {
+          const cx = r.x + r.width / 2;
+          const cy = r.y + r.height / 2;
+          const s = Math.min(r.width, r.height) * 0.4;
+          page.drawLine({
+            start: { x: cx - s, y: cy - s },
+            end: { x: cx + s, y: cy + s },
+            thickness: 1.5,
+            color: rgb(0, 0, 0),
+          });
+          page.drawLine({
+            start: { x: cx + s, y: cy - s },
+            end: { x: cx - s, y: cy + s },
+            thickness: 1.5,
+            color: rgb(0, 0, 0),
+          });
+        }
+      }
     } catch {
-      // ignore
+      // Continue on individual draw failure.
     }
   }
 
-  return pdf.save();
+  return out.save();
 }
 
 function wrap(text: string, maxChars: number): string[] {
