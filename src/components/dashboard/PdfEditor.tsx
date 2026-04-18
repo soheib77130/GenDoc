@@ -696,7 +696,9 @@ function setPageContent(pdfDoc: PDFDocument, page: any, bytes: Uint8Array) {
   page.node.set(PDFName.of("Contents"), ref);
 }
 
-// Escape a string for use as a PDF literal `( ... )`.
+// Escape a string for use as a PDF literal `( ... )`. Uses raw bytes for
+// non-ASCII chars (Latin-1 / WinAnsi), which is how most PDFs actually
+// store accented French/European text.
 function encodePdfLiteral(s: string): Uint8Array {
   const out: number[] = [0x28]; // (
   for (let i = 0; i < s.length; i++) {
@@ -704,19 +706,34 @@ function encodePdfLiteral(s: string): Uint8Array {
     if (c === 0x28 || c === 0x29 || c === 0x5C) { out.push(0x5C, c); }
     else if (c === 0x0A) { out.push(0x5C, 0x6E); }
     else if (c === 0x0D) { out.push(0x5C, 0x72); }
-    else if (c <= 0x7F) { out.push(c); }
-    else {
-      // Encode as \nnn octal (PDFDocEncoding / WinAnsi approximation)
-      const b = c & 0xFF;
-      const s1 = (b >> 6) & 0x07, s2 = (b >> 3) & 0x07, s3 = b & 0x07;
-      out.push(0x5C, 0x30 + s1, 0x30 + s2, 0x30 + s3);
-    }
+    else if (c <= 0xFF) { out.push(c); }
+    // > 0xFF chars (e.g. emoji, CJK) are skipped here; for those PDFs the
+    // hex / Identity-H paths are used instead.
   }
   out.push(0x29); // )
   return new Uint8Array(out);
 }
 
-// Build the exact byte sequence a PDF literal would have for `s`.
+// Same as encodePdfLiteral but with octal escapes for non-ASCII bytes.
+// Some older or hand-written PDFs use this form. We try both when matching.
+function encodePdfLiteralOctal(s: string): Uint8Array {
+  const out: number[] = [0x28];
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 0x28 || c === 0x29 || c === 0x5C) { out.push(0x5C, c); }
+    else if (c === 0x0A) { out.push(0x5C, 0x6E); }
+    else if (c === 0x0D) { out.push(0x5C, 0x72); }
+    else if (c <= 0x7F) { out.push(c); }
+    else if (c <= 0xFF) {
+      const b = c & 0xFF;
+      const s1 = (b >> 6) & 0x07, s2 = (b >> 3) & 0x07, s3 = b & 0x07;
+      out.push(0x5C, 0x30 + s1, 0x30 + s2, 0x30 + s3);
+    }
+  }
+  out.push(0x29);
+  return new Uint8Array(out);
+}
+
 function literalBytesForMatch(s: string): Uint8Array {
   return encodePdfLiteral(s);
 }
@@ -744,11 +761,19 @@ function replacePdfLiteralString(
 function findAllOccurrencesAnyForm(
   stream: Uint8Array, s: string,
 ): { list: { start: number; end: number }[]; encode: (r: string) => Uint8Array } | null {
-  // 1. Literal form
+  // 1. Literal form, raw bytes (the common WinAnsi case)
   {
-    const needle = literalBytesForMatch(s);
+    const needle = encodePdfLiteral(s);
     const list = findAllRanges(stream, needle);
     if (list.length) return { list, encode: (r) => encodePdfLiteral(r) };
+  }
+  // 1b. Literal form with octal escapes for non-ASCII bytes
+  {
+    const needle = encodePdfLiteralOctal(s);
+    if (!bytesEqual(needle, encodePdfLiteral(s))) {
+      const list = findAllRanges(stream, needle);
+      if (list.length) return { list, encode: (r) => encodePdfLiteralOctal(r) };
+    }
   }
   // 2. Hex 1-byte
   {
@@ -782,6 +807,12 @@ function findAllOccurrencesAnyForm(
     };
   }
   return null;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 function findAllRanges(hay: Uint8Array, needle: Uint8Array): { start: number; end: number }[] {
