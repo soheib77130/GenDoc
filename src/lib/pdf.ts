@@ -19,6 +19,7 @@ export async function fillPdfFormTemplate(
     : path.join(process.cwd(), templatePath);
   const src = fs.readFileSync(abs);
   const pdf = await PDFDocument.load(src);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
   const form = pdf.getForm();
 
   for (const [name, raw] of Object.entries(values)) {
@@ -34,27 +35,25 @@ export async function fillPdfFormTemplate(
     const type = field.constructor.name;
     try {
       if (type === "PDFTextField") {
-        form.getTextField(name).setText(String(raw));
+        const tf = form.getTextField(name);
+        tf.setText(String(raw));
+        tf.updateAppearances(font);
       } else if (type === "PDFCheckBox") {
         const cb = form.getCheckBox(name);
         if (raw === true || raw === "true" || raw === "oui" || raw === "X") cb.check();
         else cb.uncheck();
+        cb.updateAppearances();
       } else if (type === "PDFDropdown") {
         form.getDropdown(name).select(String(raw));
       } else if (type === "PDFRadioGroup") {
         form.getRadioGroup(name).select(String(raw));
       }
     } catch {
-      // Ignore fields that fail to fill — keep partial progress.
+      // Ignore individual field failures — keep partial progress.
     }
   }
 
-  try {
-    form.flatten();
-  } catch {
-    // Some CERFA forms contain XFA overlays; flatten can fail. We keep the
-    // interactive form in that case — values are still embedded.
-  }
+  form.flatten();
 
   return pdf.save();
 }

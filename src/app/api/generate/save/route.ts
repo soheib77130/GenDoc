@@ -28,11 +28,19 @@ export async function POST(req: NextRequest) {
 
   const data = body.data || {};
   let pdf: Uint8Array;
-  if (tpl.pdfForm) {
-    pdf = await fillPdfFormTemplate(tpl.pdfForm.templatePath, tpl.pdfForm.mapValues(data));
-  } else {
-    const rendered = tpl.render(data);
-    pdf = await renderTemplateToPdf(rendered);
+  try {
+    if (tpl.pdfForm) {
+      pdf = await fillPdfFormTemplate(tpl.pdfForm.templatePath, tpl.pdfForm.mapValues(data));
+    } else {
+      const rendered = tpl.render(data);
+      pdf = await renderTemplateToPdf(rendered);
+    }
+  } catch (err) {
+    console.error("[generate/save] PDF generation failed:", err);
+    return NextResponse.json(
+      { error: "Erreur lors de la génération du PDF" },
+      { status: 500 }
+    );
   }
 
   const doc = await prisma.document.create({
