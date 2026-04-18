@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getTemplate, getCategory } from "@/lib/templates";
 import { getQuotaStatus, consumeAction } from "@/lib/quota";
-import { bytesToBase64, renderTemplateToPdf } from "@/lib/pdf";
+import { bytesToBase64, fillPdfFormTemplate, renderTemplateToPdf } from "@/lib/pdf";
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -26,8 +26,14 @@ export async function POST(req: NextRequest) {
 
   await consumeAction(user.id, "generate");
 
-  const rendered = tpl.render(body.data || {});
-  const pdf = await renderTemplateToPdf(rendered);
+  const data = body.data || {};
+  let pdf: Uint8Array;
+  if (tpl.pdfForm) {
+    pdf = await fillPdfFormTemplate(tpl.pdfForm.templatePath, tpl.pdfForm.mapValues(data));
+  } else {
+    const rendered = tpl.render(data);
+    pdf = await renderTemplateToPdf(rendered);
+  }
 
   const doc = await prisma.document.create({
     data: {

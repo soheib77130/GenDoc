@@ -1,10 +1,63 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fs from "fs";
+import path from "path";
 
 type Rendered = {
   title: string;
   body: string[];
   footer?: string;
 };
+
+export type PdfFormValues = Record<string, string | boolean>;
+
+export async function fillPdfFormTemplate(
+  templatePath: string,
+  values: PdfFormValues
+): Promise<Uint8Array> {
+  const abs = path.isAbsolute(templatePath)
+    ? templatePath
+    : path.join(process.cwd(), templatePath);
+  const src = fs.readFileSync(abs);
+  const pdf = await PDFDocument.load(src);
+  const form = pdf.getForm();
+
+  for (const [name, raw] of Object.entries(values)) {
+    if (raw == null || raw === "") continue;
+    const field = (() => {
+      try {
+        return form.getField(name);
+      } catch {
+        return null;
+      }
+    })();
+    if (!field) continue;
+    const type = field.constructor.name;
+    try {
+      if (type === "PDFTextField") {
+        form.getTextField(name).setText(String(raw));
+      } else if (type === "PDFCheckBox") {
+        const cb = form.getCheckBox(name);
+        if (raw === true || raw === "true" || raw === "oui" || raw === "X") cb.check();
+        else cb.uncheck();
+      } else if (type === "PDFDropdown") {
+        form.getDropdown(name).select(String(raw));
+      } else if (type === "PDFRadioGroup") {
+        form.getRadioGroup(name).select(String(raw));
+      }
+    } catch {
+      // Ignore fields that fail to fill — keep partial progress.
+    }
+  }
+
+  try {
+    form.flatten();
+  } catch {
+    // Some CERFA forms contain XFA overlays; flatten can fail. We keep the
+    // interactive form in that case — values are still embedded.
+  }
+
+  return pdf.save();
+}
 
 function wrap(text: string, maxChars: number): string[] {
   const words = text.split(" ");
