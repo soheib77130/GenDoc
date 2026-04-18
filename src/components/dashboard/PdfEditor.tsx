@@ -1059,19 +1059,25 @@ function EditableTextItem({ item, scale, active, onActivate, onDeactivate, onPat
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Deactivate on outside click
+  // Deactivate on outside click. Important: commit the in-progress input
+  // value BEFORE unmounting it, otherwise typing then clicking elsewhere
+  // (e.g. on the download button) loses the edit silently.
   useEffect(() => {
     if (!active) return;
     const onDoc = (e: MouseEvent) => {
       const el = e.target as HTMLElement | null;
       if (el?.closest("[data-textitem='" + item.id + "']")) return;
       if (el?.closest("[data-toolbar='" + item.id + "']")) return;
+      const live = inputRef.current?.value;
+      if (live != null && live !== item.current) {
+        onPatch({ current: live });
+      }
       setEditing(false);
       onDeactivate();
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [active, item.id, onDeactivate]);
+  }, [active, item.id, item.current, onDeactivate, onPatch]);
 
   function startEdit(e: React.MouseEvent) {
     e.stopPropagation();
