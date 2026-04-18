@@ -257,12 +257,12 @@ export function PdfEditor({ usage }: {
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const scriptFont = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-      // 1. Apply edited text items. Preferred path: modify the page's raw
-      // content stream so only the Tj string operand changes — same font,
-      // same color, same weight, same position, nothing else touched.
-      // Fallback (for text we can't byte-match): overlay erase + redraw.
+      // 1. Apply edited text items. Only path: modify the page's raw content
+      // stream so nothing but the text bytes changes. If an edit can't be
+      // applied (text fragment not matchable in the stream), skip it — we
+      // don't fall back to any overlay so we never alter visuals around.
       const edited = textItems.filter(t => t.edited);
-      const unhandled: typeof edited = [];
+      const skipped: string[] = [];
 
       // Group edits by page so we only decompress each stream once
       const byPage = new Map<number, typeof edited>();
@@ -273,55 +273,18 @@ export function PdfEditor({ usage }: {
 
       byPage.forEach((items, pageNum) => {
         const p = pdfPages[pageNum - 1];
-        if (!p) { unhandled.push(...items); return; }
+        if (!p) { items.forEach(t => skipped.push(t.original)); return; }
         const bytes = getPageContentBytes(p);
-        if (!bytes) { unhandled.push(...items); return; }
+        if (!bytes) { items.forEach(t => skipped.push(t.original)); return; }
 
         let buf: Uint8Array = bytes;
-        const remaining: typeof items = [];
         for (const t of items) {
-          const replaced = replacePdfLiteralString(buf, t.original, t.current);
+          const replaced = replacePdfString(buf, t.original, t.current);
           if (replaced) buf = replaced;
-          else remaining.push(t);
+          else skipped.push(t.original);
         }
         if (buf !== bytes) setPageContent(pdfDoc, p, buf);
-        unhandled.push(...remaining);
       });
-
-      // Fallback: for items whose source string wasn't found as a literal
-      // Tj operand (hex strings, CID fonts, TJ arrays with kerning splits),
-      // fall back to erase-and-redraw.
-      for (const t of unhandled) {
-        const p = pdfPages[t.page - 1];
-        if (!p) continue;
-        const bg = rgb(t.bgColor.r, t.bgColor.g, t.bgColor.b);
-        const offsets = [-0.5, -0.25, 0, 0.25, 0.5];
-        for (const dx of offsets) {
-          for (const dy of offsets) {
-            p.drawText(t.original, {
-              x: t.pdfX + dx,
-              y: t.pdfY + dy,
-              size: t.pdfFontSize,
-              font,
-              color: bg,
-            });
-          }
-        }
-        let size = t.pdfFontSize;
-        const origW = font.widthOfTextAtSize(t.original, size);
-        const newW = font.widthOfTextAtSize(t.current, size);
-        const budget = Math.max(t.pdfWidth, origW);
-        if (budget > 0 && newW > budget) {
-          size = Math.max(6, size * (budget / newW));
-        }
-        p.drawText(t.current, {
-          x: t.pdfX,
-          y: t.pdfY,
-          size,
-          font,
-          color: rgb(t.textColor.r, t.textColor.g, t.textColor.b),
-        });
-      }
 
       // 2. Apply annotation overlays (existing feature)
       const page0 = pdfPages[0];
@@ -337,6 +300,12 @@ export function PdfEditor({ usage }: {
       }
 
       const bytes = await pdfDoc.save();
+
+      if (skipped.length) {
+        const preview = skipped.slice(0, 2).map(s => `"${s}"`).join(", ");
+        const more = skipped.length > 2 ? ` et ${skipped.length - 2} autre(s)` : "";
+        setErr(`${skipped.length} modification(s) ignorée(s) (${preview}${more}) — ce texte est encodé d'une façon que l'outil ne peut pas modifier en l'état sans altérer l'apparence. Le reste du PDF est intact.`);
+      }
 
       if (save) {
         let base64 = "";
@@ -638,6 +607,149 @@ function replacePdfLiteralString(
   out.set(replacement, idx);
   out.set(stream.subarray(idx + needle.length), idx + replacement.length);
   return out;
+}
+
+// Try every supported form in turn: literal `(s)`, hex `<HHHH>`
+// (1-byte WinAnsi and 2-byte UTF-16BE / Identity-H), and TJ arrays whose
+// string operands concatenate to `s`.
+function replacePdfString(stream: Uint8Array, s: string, r: string): Uint8Array | null {
+  // 1. Plain literal
+  const lit = replacePdfLiteralString(stream, s, r);
+  if (lit) return lit;
+  // 2. Hex, 1 byte per char (Latin-1 / WinAnsi)
+  const hex1 = hexBytes(s, false);
+  const repHex1 = hexBytes(r, false);
+  const hex1Rep = replaceByteRange(stream, hex1, repHex1);
+  if (hex1Rep) return hex1Rep;
+  // 3. Hex, 2 bytes per char big-endian (UTF-16 / Identity-H CID)
+  const hex2 = hexBytes(s, true);
+  const repHex2 = hexBytes(r, true);
+  const hex2Rep = replaceByteRange(stream, hex2, repHex2);
+  if (hex2Rep) return hex2Rep;
+  // 4. TJ array with multiple literal fragments that concatenate to s
+  const tjRep = replaceInTJArray(stream, s, r);
+  if (tjRep) return tjRep;
+  return null;
+}
+
+function hexBytes(s: string, utf16: boolean): Uint8Array {
+  const parts: number[] = [0x3C]; // <
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (utf16) {
+      parts.push(...hexOfByte((c >> 8) & 0xFF));
+      parts.push(...hexOfByte(c & 0xFF));
+    } else {
+      parts.push(...hexOfByte(c & 0xFF));
+    }
+  }
+  parts.push(0x3E); // >
+  return new Uint8Array(parts);
+}
+function hexOfByte(b: number): number[] {
+  const hi = (b >> 4) & 0xF, lo = b & 0xF;
+  return [hi < 10 ? 0x30 + hi : 0x41 + hi - 10, lo < 10 ? 0x30 + lo : 0x41 + lo - 10];
+}
+
+function replaceByteRange(stream: Uint8Array, needle: Uint8Array, repl: Uint8Array): Uint8Array | null {
+  if (needle.length <= 2) return null; // bracket-only match, too permissive
+  const idx = indexOfBytes(stream, needle);
+  if (idx < 0) return null;
+  const out = new Uint8Array(stream.length - needle.length + repl.length);
+  out.set(stream.subarray(0, idx), 0);
+  out.set(repl, idx);
+  out.set(stream.subarray(idx + needle.length), idx + repl.length);
+  return out;
+}
+
+// Walk `[...] TJ` blocks, parse their string fragments (literal or hex),
+// and if the concatenation equals `s`, rewrite the whole array as a single
+// literal holding `r`. We preserve the trailing ` TJ` token.
+function replaceInTJArray(stream: Uint8Array, s: string, r: string): Uint8Array | null {
+  let i = 0;
+  while (i < stream.length) {
+    if (stream[i] !== 0x5B) { i++; continue; } // '['
+    const start = i;
+    i++;
+    let content = "";
+    while (i < stream.length && stream[i] !== 0x5D) { // until ']'
+      const c = stream[i];
+      if (c === 0x28) { // (literal)
+        let j = i + 1, depth = 1, text = "";
+        while (j < stream.length && depth > 0) {
+          const cc = stream[j];
+          if (cc === 0x5C && j + 1 < stream.length) {
+            const esc = stream[j + 1];
+            if (esc === 0x6E) { text += "\n"; j += 2; }
+            else if (esc === 0x72) { text += "\r"; j += 2; }
+            else if (esc === 0x74) { text += "\t"; j += 2; }
+            else if (esc >= 0x30 && esc <= 0x37) {
+              // octal up to 3 digits
+              let oct = esc - 0x30, k = j + 2;
+              while (k < j + 4 && stream[k] >= 0x30 && stream[k] <= 0x37) {
+                oct = oct * 8 + (stream[k] - 0x30); k++;
+              }
+              text += String.fromCharCode(oct & 0xFF);
+              j = k;
+            }
+            else { text += String.fromCharCode(esc); j += 2; }
+          } else if (cc === 0x28) { depth++; text += "("; j++; }
+          else if (cc === 0x29) { depth--; if (depth > 0) text += ")"; j++; }
+          else { text += String.fromCharCode(cc); j++; }
+        }
+        content += text;
+        i = j;
+      } else if (c === 0x3C) { // <hex>
+        let j = i + 1, hex = "";
+        while (j < stream.length && stream[j] !== 0x3E) {
+          const cc = stream[j];
+          if ((cc >= 0x30 && cc <= 0x39) || (cc >= 0x41 && cc <= 0x46) || (cc >= 0x61 && cc <= 0x66)) {
+            hex += String.fromCharCode(cc);
+          }
+          j++;
+        }
+        if (hex.length % 2) hex += "0";
+        // Decode both as 1-byte and 2-byte; we'll try 1-byte first and if it
+        // produces non-printable we'll treat as 2-byte later. Here we just
+        // collect 1-byte decoding.
+        let text = "";
+        for (let k = 0; k < hex.length; k += 2) {
+          text += String.fromCharCode(parseInt(hex.substr(k, 2), 16));
+        }
+        content += text;
+        i = j + 1;
+      } else {
+        // number or whitespace — skip
+        i++;
+      }
+    }
+    if (i >= stream.length) return null;
+    // Now stream[i] === ']'
+    const endBracket = i;
+    // Look for next non-whitespace token after ']'
+    let k = endBracket + 1;
+    while (k < stream.length && (stream[k] === 0x20 || stream[k] === 0x0A || stream[k] === 0x0D || stream[k] === 0x09)) k++;
+    // Must be "TJ"
+    if (k + 1 >= stream.length || stream[k] !== 0x54 || stream[k + 1] !== 0x4A) {
+      i = endBracket + 1; continue;
+    }
+    const afterTJ = k + 2;
+    if (content === s) {
+      // Replace the whole "[...] TJ" with "(r) Tj"
+      const newLit = encodePdfLiteral(r);
+      const tj = new Uint8Array([0x20, 0x54, 0x6A]); // " Tj"
+      const replacement = new Uint8Array(newLit.length + tj.length);
+      replacement.set(newLit, 0); replacement.set(tj, newLit.length);
+      const origLen = afterTJ - start;
+      const out = new Uint8Array(stream.length - origLen + replacement.length);
+      out.set(stream.subarray(0, start), 0);
+      out.set(replacement, start);
+      out.set(stream.subarray(afterTJ), start + replacement.length);
+      return out;
+    }
+    i = endBracket + 1;
+  }
+  return null;
 }
 
 function indexOfBytes(hay: Uint8Array, needle: Uint8Array, from = 0): number {
