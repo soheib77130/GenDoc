@@ -18,14 +18,14 @@ export const PLANS: Plan[] = [
     name: "Gratuit",
     priceCts: 0,
     period: "mois",
-    tagline: "Essai libre, paiement à l'unité",
+    tagline: "5 crédits offerts à l'inscription",
     quotaGen: 0,
     quotaEdit: 0,
     features: [
       "Accès à tous les modèles",
       "Aperçu gratuit avant téléchargement",
-      "Génération : 0,99€ / document",
-      "Modification PDF : 0,99€ / document",
+      "Génération : 5 crédits / document",
+      "Modification PDF : 1 crédit / document",
       "Conservation des documents 7 jours",
     ],
   },
@@ -66,7 +66,17 @@ export const PLANS: Plan[] = [
   },
 ];
 
-export const UNIT_PRICE_CTS = 99; // 0,99€ à l'unité
+export const UNIT_PRICE_CTS = 99; // 0,99€ par crédit
+
+// Coût en crédits par type d'action
+export const ACTION_COST: Record<"generate" | "edit", number> = {
+  generate: 5,
+  edit: 1,
+};
+
+// Crédits offerts au programme de parrainage
+export const SIGNUP_CREDITS = 5;
+export const REFERRAL_BONUS_CREDITS = 10;
 
 export const CREDITS_PACKS = [
   { id: "pack-5", label: "5 crédits", credits: 5, priceCts: 399 },

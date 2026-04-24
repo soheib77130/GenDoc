@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import { getPlan, UNIT_PRICE_CTS } from "./plans";
+import { ACTION_COST, getPlan, UNIT_PRICE_CTS } from "./plans";
 
 export type Action = "generate" | "edit";
 
@@ -10,6 +10,7 @@ type QuotaStatus = {
   needsPayment: boolean;
   remaining: number; // remaining in plan quota
   credits: number; // remaining credits
+  cost: number; // crédits requis pour cette action
   planName: string;
 };
 
@@ -45,16 +46,18 @@ export async function getQuotaStatus(
   const max = action === "generate" ? plan.quotaGen : plan.quotaEdit;
   const remaining = Math.max(0, max - used);
   const usingQuota = remaining > 0;
-  const needsCredits = !usingQuota && user.credits > 0;
-  const needsPayment = !usingQuota && user.credits <= 0;
+  const cost = ACTION_COST[action];
+  const needsCredits = !usingQuota && user.credits >= cost;
+  const needsPayment = !usingQuota && user.credits < cost;
 
   return {
-    allowed: usingQuota || needsCredits || needsPayment,
+    allowed: usingQuota || needsCredits,
     usingQuota,
     needsCredits,
     needsPayment,
     remaining,
     credits: user.credits,
+    cost,
     planName: plan.name,
   };
 }
@@ -78,9 +81,9 @@ export async function consumeAction(userId: string, action: Action) {
   if (status.needsCredits) {
     await prisma.user.update({
       where: { id: userId },
-      data: { credits: { decrement: 1 } },
+      data: { credits: { decrement: status.cost } },
     });
-    return { kind: "credits" as const };
+    return { kind: "credits" as const, spent: status.cost };
   }
   // needs payment — caller should have redirected earlier
   throw new Error("PAYMENT_REQUIRED");

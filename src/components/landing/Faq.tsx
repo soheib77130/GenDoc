@@ -6,7 +6,11 @@ import { useState } from "react";
 const faqs = [
   {
     q: "Comment fonctionne le paiement à l'unité ?",
-    a: "Si vous n'avez pas d'abonnement, chaque génération ou modification coûte 0,99€. Vous pouvez aussi acheter des packs de crédits pré-payés avec un meilleur tarif.",
+    a: "À l'inscription, 5 crédits vous sont offerts. Ensuite, chaque génération coûte 5 crédits et chaque modification PDF coûte 1 crédit. Vous pouvez acheter des packs de crédits ou souscrire à un abonnement pour un meilleur tarif.",
+  },
+  {
+    q: "Comment fonctionne le parrainage ?",
+    a: "Depuis votre tableau de bord, partagez votre lien de parrainage. Pour chaque ami qui s'inscrit via votre lien, vous recevez 10 crédits et votre filleul reçoit 10 crédits bonus (en plus des 5 crédits de bienvenue).",
   },
   {
     q: "Puis-je changer de formule à tout moment ?",

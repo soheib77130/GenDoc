@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { ReferralCard } from "@/components/dashboard/ReferralCard";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getPlan } from "@/lib/plans";
+import { getPlan, REFERRAL_BONUS_CREDITS } from "@/lib/plans";
+import { ensureReferralCode } from "@/lib/referral";
 import { CATEGORIES } from "@/lib/templates";
 import { formatDate } from "@/lib/utils";
 import {
@@ -19,14 +21,19 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const plan = getPlan(user.plan);
-  const recent = await prisma.document.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
+  const [recent, referralCode, invitedCount] = await Promise.all([
+    prisma.document.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    ensureReferralCode(user.id),
+    prisma.user.count({ where: { referredById: user.id } }),
+  ]);
 
   const genPct = plan.quotaGen > 0 ? (user.quotaGenUsed / plan.quotaGen) * 100 : 0;
   const editPct = plan.quotaEdit > 0 ? (user.quotaEditUsed / plan.quotaEdit) * 100 : 0;
+  const referralCreditsEarned = invitedCount * REFERRAL_BONUS_CREDITS;
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
@@ -101,7 +108,7 @@ export default async function DashboardPage() {
           )}
           {plan.quotaGen === 0 && (
             <p className="mt-3 text-xs text-slate-500">
-              Plan sans forfait — 0,99€ par document.
+              Plan sans forfait — 5 crédits par génération.
             </p>
           )}
         </div>
@@ -131,7 +138,7 @@ export default async function DashboardPage() {
           )}
           {plan.quotaEdit === 0 && (
             <p className="mt-3 text-xs text-slate-500">
-              Plan sans forfait — 0,99€ par document.
+              Plan sans forfait — 1 crédit par modification.
             </p>
           )}
         </div>
@@ -154,6 +161,15 @@ export default async function DashboardPage() {
             Acheter des crédits →
           </Link>
         </div>
+      </div>
+
+      {/* Referral program */}
+      <div className="mt-6">
+        <ReferralCard
+          code={referralCode}
+          invitedCount={invitedCount}
+          creditsEarned={referralCreditsEarned}
+        />
       </div>
 
       {/* Recent documents */}

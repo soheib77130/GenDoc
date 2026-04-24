@@ -1,18 +1,25 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [referralCode, setReferralCode] = useState("");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref") || "";
+    setReferralCode(ref.trim().toUpperCase());
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -21,7 +28,12 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({
+        email,
+        password,
+        name,
+        referralCode: referralCode || undefined,
+      }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -45,9 +57,20 @@ export default function RegisterPage() {
           Créez votre compte ✨
         </h1>
         <p className="mt-1.5 text-sm text-slate-600">
-          Commencez à générer vos documents en 20 secondes.
+          5 crédits offerts — commencez à générer vos documents en 20 secondes.
         </p>
       </div>
+
+      {referralCode && (
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
+          <Gift className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-600" />
+          <div>
+            Parrainage <span className="font-mono font-semibold">{referralCode}</span>{" "}
+            appliqué — vous recevrez <strong>15 crédits</strong> à l'inscription
+            (5 offerts + 10 bonus parrainage).
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-8 shadow-xl shadow-slate-900/5 backdrop-blur-xl">
         <form onSubmit={onSubmit} className="space-y-5">

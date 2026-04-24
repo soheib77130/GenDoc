@@ -27,6 +27,12 @@ model User {
   // Pay-as-you-go credits (bought à l'unité)
   credits       Int       @default(0)
 
+  // Referral program
+  referralCode  String?   @unique
+  referredById  String?
+  referredBy    User?     @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals     User[]    @relation("UserReferrals")
+
   documents     Document[]
   payments      Payment[]
 }

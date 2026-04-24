@@ -163,8 +163,7 @@ export function PricingClient({
               Crédits à l'unité
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Achetez des crédits pour générer ou modifier sans abonnement. 1 crédit
-              = 1 action.
+              Générer un document = 5 crédits · Modifier un PDF = 1 crédit.
             </p>
           </div>
           <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 md:block">

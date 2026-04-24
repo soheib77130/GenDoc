@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { getCurrentUser } from "@/lib/auth";
 import { PLANS, CREDITS_PACKS, UNIT_PRICE_CTS } from "@/lib/plans";
 import { PricingClient } from "@/components/dashboard/PricingClient";
+import { Gift } from "lucide-react";
 
 export default async function PricingPage({
   searchParams,
@@ -30,6 +30,13 @@ export default async function PricingPage({
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-8 flex items-center gap-3 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-cyan-50 px-5 py-4 text-sm text-emerald-900">
+            <Gift className="h-5 w-5 flex-shrink-0 text-emerald-600" />
+            <div>
+              <strong>5 crédits offerts</strong> à l'inscription — parrainez un ami et
+              recevez chacun <strong>10 crédits supplémentaires</strong>.
+            </div>
+          </div>
           <PricingClient
             plans={PLANS}
             packs={CREDITS_PACKS}
