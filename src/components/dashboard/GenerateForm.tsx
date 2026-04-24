@@ -43,6 +43,7 @@ export function GenerateForm({
     usingQuota: boolean;
     remaining: number;
     credits: number;
+    cost: number;
     needsPayment: boolean;
     unitPriceCts: number;
   };
@@ -104,9 +105,9 @@ export function GenerateForm({
 
   const billLabel = usage.usingQuota
     ? `Inclus dans votre plan ${usage.planName} (reste ${usage.remaining})`
-    : usage.credits > 0
-    ? `Utilisera 1 crédit (reste ${usage.credits})`
-    : `Paiement de ${(usage.unitPriceCts / 100).toFixed(2)}€ requis`;
+    : usage.credits >= usage.cost
+    ? `Utilisera ${usage.cost} crédit${usage.cost > 1 ? "s" : ""} (reste ${usage.credits})`
+    : `Crédits insuffisants — il vous manque ${usage.cost - usage.credits} crédit${usage.cost - usage.credits > 1 ? "s" : ""}`;
 
   return (
     <div>
@@ -118,19 +119,19 @@ export function GenerateForm({
         Retour — {categoryName}
       </Link>
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           {templateName}
         </h1>
-        <p className="mt-1.5 text-slate-600">{templateDescription}</p>
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">{templateDescription}</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         {/* Form */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-sm backdrop-blur"
+          className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur sm:p-6"
         >
           <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-slate-500">
             Informations
@@ -221,7 +222,7 @@ export function GenerateForm({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="sticky top-6 h-fit"
+          className="h-fit lg:sticky lg:top-6"
         >
           <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-2.5">
@@ -233,7 +234,7 @@ export function GenerateForm({
                 A4
               </div>
             </div>
-            <div className="max-h-[720px] overflow-auto p-10 doc-preview scrollbar-thin">
+            <div className="max-h-[500px] overflow-auto p-5 doc-preview scrollbar-thin sm:max-h-[720px] sm:p-10">
               {preview ? (
                 <>
                   <h1>{preview.title}</h1>

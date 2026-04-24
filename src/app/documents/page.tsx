@@ -18,11 +18,11 @@ export default async function DocumentsPage() {
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Mes documents
         </h1>
-        <p className="mt-1.5 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
           {docs.length} document{docs.length > 1 ? "s" : ""} au total.
         </p>
       </div>
@@ -78,7 +78,7 @@ export default async function DocumentsPage() {
                     {cat?.name || "Divers"} · {formatDate(d.createdAt)}
                   </div>
                 </div>
-                <div className="text-sm font-medium text-indigo-600 opacity-0 transition group-hover:opacity-100">
+                <div className="flex-shrink-0 text-sm font-medium text-indigo-600 transition md:opacity-0 md:group-hover:opacity-100">
                   Ouvrir →
                 </div>
               </Link>

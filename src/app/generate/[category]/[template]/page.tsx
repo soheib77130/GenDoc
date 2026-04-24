@@ -33,6 +33,7 @@ export default async function TemplatePage({
           usingQuota: status.usingQuota,
           remaining: status.remaining,
           credits: status.credits,
+          cost: status.cost,
           needsPayment: status.needsPayment,
           unitPriceCts: UNIT_PRICE_CTS,
         }}

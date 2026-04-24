@@ -37,11 +37,11 @@ export default async function DashboardPage() {
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Bonjour {user.name || user.email.split("@")[0]} 👋
         </h1>
-        <p className="mt-1.5 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
           Voici un aperçu de votre activité et de vos crédits.
         </p>
       </div>
@@ -198,49 +198,88 @@ export default async function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/50 text-left text-xs uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Titre</th>
-                  <th className="px-5 py-3 font-medium">Type</th>
-                  <th className="px-5 py-3 font-medium">Catégorie</th>
-                  <th className="px-5 py-3 font-medium">Créé le</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recent.map((d) => (
-                  <tr key={d.id} className="transition hover:bg-slate-50/60">
-                    <td className="px-5 py-3 font-medium text-slate-900">{d.title}</td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          d.kind === "generated"
-                            ? "bg-indigo-50 text-indigo-700"
-                            : "bg-fuchsia-50 text-fuchsia-700"
-                        }`}
-                      >
-                        {d.kind === "generated" ? "Généré" : "Modifié"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">
-                      {CATEGORIES.find((c) => c.id === d.category)?.name || "—"}
-                    </td>
-                    <td className="px-5 py-3 text-slate-500">{formatDate(d.createdAt)}</td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/api/documents/${d.id}/download`}
-                        className="text-indigo-600 hover:underline"
-                      >
-                        Télécharger
-                      </Link>
-                    </td>
+          <>
+            {/* Mobile : cartes empilées */}
+            <div className="space-y-3 md:hidden">
+              {recent.map((d) => (
+                <div
+                  key={d.id}
+                  className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 backdrop-blur"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-slate-900">
+                        {d.title}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 font-medium ${
+                            d.kind === "generated"
+                              ? "bg-indigo-50 text-indigo-700"
+                              : "bg-fuchsia-50 text-fuchsia-700"
+                          }`}
+                        >
+                          {d.kind === "generated" ? "Généré" : "Modifié"}
+                        </span>
+                        <span>{formatDate(d.createdAt)}</span>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/api/documents/${d.id}/download`}
+                      className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                    >
+                      Télécharger
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop : tableau */}
+            <div className="hidden overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur md:block">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50/50 text-left text-xs uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">Titre</th>
+                    <th className="px-5 py-3 font-medium">Type</th>
+                    <th className="px-5 py-3 font-medium">Catégorie</th>
+                    <th className="px-5 py-3 font-medium">Créé le</th>
+                    <th className="px-5 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recent.map((d) => (
+                    <tr key={d.id} className="transition hover:bg-slate-50/60">
+                      <td className="px-5 py-3 font-medium text-slate-900">{d.title}</td>
+                      <td className="px-5 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            d.kind === "generated"
+                              ? "bg-indigo-50 text-indigo-700"
+                              : "bg-fuchsia-50 text-fuchsia-700"
+                          }`}
+                        >
+                          {d.kind === "generated" ? "Généré" : "Modifié"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">
+                        {CATEGORIES.find((c) => c.id === d.category)?.name || "—"}
+                      </td>
+                      <td className="px-5 py-3 text-slate-500">{formatDate(d.createdAt)}</td>
+                      <td className="px-5 py-3 text-right">
+                        <Link
+                          href={`/api/documents/${d.id}/download`}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          Télécharger
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </AppShell>

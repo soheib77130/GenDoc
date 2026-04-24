@@ -35,20 +35,20 @@ export default async function DocumentDetail({
         Mes documents
       </Link>
 
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+      <div className="mb-6 flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
             {cat?.name || "Document"} · {formatDate(doc.createdAt)}
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
             {doc.title}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <DeleteButton docId={doc.id} />
           <a
             href={`/api/documents/${doc.id}/download`}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-5 text-sm font-medium text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl"
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400 px-5 text-sm font-medium text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl md:flex-none"
           >
             <Download className="h-4 w-4" />
             Télécharger le PDF
@@ -65,7 +65,7 @@ export default async function DocumentDetail({
             </div>
             <div className="text-[10px] uppercase tracking-wider text-slate-400">A4</div>
           </div>
-          <div className="max-h-[720px] overflow-auto p-10 doc-preview scrollbar-thin">
+          <div className="max-h-[720px] overflow-auto p-5 doc-preview scrollbar-thin sm:p-10">
             <h1>{rendered.title}</h1>
             {rendered.body.map((p, i) => (
               <p key={i}>{p}</p>

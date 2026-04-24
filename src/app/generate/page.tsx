@@ -11,21 +11,21 @@ export default async function GenerateIndex() {
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Générer un document
         </h1>
-        <p className="mt-1.5 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
           Choisissez une catégorie pour démarrer.
         </p>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
         {CATEGORIES.map((cat) => (
           <Link
             key={cat.id}
             href={`/generate/${cat.id}`}
-            className="group relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/80 p-7 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-900/5 backdrop-blur"
+            className="group relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/80 p-5 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-900/5 backdrop-blur sm:p-7"
           >
             <div className="flex items-start justify-between">
               <div
@@ -37,7 +37,7 @@ export default async function GenerateIndex() {
                 <ArrowRight className="h-4 w-4" />
               </div>
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-slate-900">{cat.name}</h3>
+            <h3 className="mt-5 text-lg font-semibold text-slate-900 sm:text-xl">{cat.name}</h3>
             <p className="mt-1.5 text-sm text-slate-600">{cat.description}</p>
             <div className="mt-5 flex flex-wrap gap-1.5">
               {cat.templates.map((t) => (

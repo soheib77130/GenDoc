@@ -41,44 +41,46 @@ export function ReferralCard({ code, invitedCount, creditsEarned }: Props) {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-6 shadow-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-5 shadow-sm sm:p-6">
       <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-emerald-200/40 blur-3xl" />
       <div className="relative">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-700">
           <Gift className="h-4 w-4" />
           Programme de parrainage
         </div>
-        <h3 className="mt-2 text-xl font-semibold text-slate-900">
+        <h3 className="mt-2 text-lg font-semibold text-slate-900 sm:text-xl">
           Invitez un ami, recevez <span className="text-emerald-600">10 crédits</span>
         </h3>
         <p className="mt-1 text-sm text-slate-600">
           Votre filleul reçoit aussi 10 crédits en plus des 5 crédits de bienvenue.
         </p>
 
-        <div className="mt-4 flex items-stretch gap-2">
-          <div className="flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm">
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm">
             <div className="truncate font-mono text-slate-700">{link}</div>
           </div>
-          <button
-            onClick={copy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-emerald-600" /> Copié
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" /> Copier
-              </>
-            )}
-          </button>
-          <button
-            onClick={share}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            <Share2 className="h-4 w-4" /> Partager
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={copy}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex-none"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4 text-emerald-600" /> Copié
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" /> Copier
+                </>
+              )}
+            </button>
+            <button
+              onClick={share}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 sm:flex-none"
+            >
+              <Share2 className="h-4 w-4" /> Partager
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-4 text-sm">

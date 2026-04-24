@@ -18,18 +18,18 @@ export default async function PricingPage({
     return (
       <main className="overflow-x-hidden">
         <Navbar />
-        <div className="pt-36 pb-6">
-          <div className="mx-auto max-w-3xl px-6 text-center">
-            <h1 className="text-balance text-5xl font-semibold tracking-tight text-slate-900">
+        <div className="pt-28 pb-6 sm:pt-36">
+          <div className="mx-auto max-w-3xl px-5 text-center sm:px-6">
+            <h1 className="text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
               Des tarifs simples et honnêtes.
             </h1>
-            <p className="mx-auto mt-4 max-w-xl text-slate-600">
+            <p className="mx-auto mt-4 max-w-xl text-sm text-slate-600 sm:text-base">
               Choisissez l'abonnement qui vous convient. Payez à l'unité si vous
               préférez. Annulez à tout moment.
             </p>
           </div>
         </div>
-        <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-6xl px-5 pb-10 sm:px-6">
           <div className="mb-8 flex items-center gap-3 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-cyan-50 px-5 py-4 text-sm text-emerald-900">
             <Gift className="h-5 w-5 flex-shrink-0 text-emerald-600" />
             <div>
@@ -52,11 +52,11 @@ export default async function PricingPage({
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Abonnement & crédits
         </h1>
-        <p className="mt-1.5 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
           Plan actuel : <span className="font-medium capitalize">{user.plan}</span> ·
           Crédits disponibles : <span className="font-medium">{user.credits}</span>
         </p>

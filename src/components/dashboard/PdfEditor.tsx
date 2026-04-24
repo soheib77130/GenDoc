@@ -451,8 +451,8 @@ export function PdfEditor({ usage }: {
 
   const billLabel = usage.usingQuota
     ? `Inclus — ${usage.planName} (reste ${usage.remaining})`
-    : usage.credits > 0 ? `1 crédit (reste ${usage.credits})`
-    : `${(usage.unitPriceCts / 100).toFixed(2)}€ requis`;
+    : usage.credits >= 1 ? `1 crédit (reste ${usage.credits})`
+    : `Crédits insuffisants`;
 
   /* ─── Upload screen ─── */
   if (!fileBytes) {

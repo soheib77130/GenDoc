@@ -5,17 +5,17 @@ import { ArrowRight, Sparkles, FileSignature, Wand2, ShieldCheck } from "lucide-
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-36 pb-28">
+    <section className="relative overflow-hidden pt-28 pb-16 sm:pt-36 sm:pb-28">
       {/* Background grid + gradient glow */}
       <div className="pointer-events-none absolute inset-0 grid-bg radial-fade opacity-70" />
       <div className="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-br from-indigo-400/30 via-sky-300/20 to-cyan-300/20 blur-3xl" />
 
-      <div className="relative mx-auto max-w-6xl px-6 text-center">
+      <div className="relative mx-auto max-w-6xl px-5 text-center sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mx-auto inline-flex items-center gap-2 rounded-full border border-indigo-200/60 bg-white/70 px-4 py-1.5 text-xs font-medium text-indigo-700 shadow-sm backdrop-blur"
+          className="mx-auto inline-flex items-center gap-2 rounded-full border border-indigo-200/60 bg-white/70 px-3.5 py-1.5 text-[11px] font-medium text-indigo-700 shadow-sm backdrop-blur sm:px-4 sm:text-xs"
         >
           <Sparkles className="h-3.5 w-3.5" />
           Nouveau — Éditeur PDF intelligent avec OCR
@@ -25,7 +25,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="mt-6 text-balance text-5xl font-semibold leading-[1.05] tracking-tight text-slate-900 md:text-7xl"
+          className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-slate-900 sm:text-5xl md:text-7xl"
         >
           Vos documents,{" "}
           <span className="relative inline-block">
@@ -54,7 +54,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="mx-auto mt-7 max-w-2xl text-balance text-lg text-slate-600"
+          className="mx-auto mt-6 max-w-2xl text-balance text-base text-slate-600 sm:mt-7 sm:text-lg"
         >
           Certificats, contrats, attestations, baux — générez des documents
           professionnels à partir de nos modèles, ou modifiez vos PDF existants
@@ -65,18 +65,18 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-9 sm:flex-row sm:items-center"
         >
           <Link
             href="/register"
-            className="group inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-400 px-6 text-sm font-medium text-white shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-500/40"
+            className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-400 px-6 text-sm font-medium text-white shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-500/40"
           >
             Essayer gratuitement
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </Link>
           <Link
             href="/#categories"
-            className="inline-flex h-12 items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-6 text-sm font-medium text-slate-800 backdrop-blur transition hover:border-slate-300 hover:bg-white"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-6 text-sm font-medium text-slate-800 backdrop-blur transition hover:border-slate-300 hover:bg-white"
           >
             Voir les modèles
           </Link>
@@ -104,7 +104,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="relative mx-auto mt-20 max-w-4xl"
+          className="relative mx-auto mt-14 max-w-4xl sm:mt-20"
         >
           <div className="pointer-events-none absolute -inset-8 -z-10 rounded-[40px] bg-gradient-to-br from-indigo-400/30 via-sky-300/30 to-cyan-300/30 blur-3xl" />
           <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/80 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
@@ -149,7 +149,7 @@ export function Hero() {
                 </button>
               </div>
 
-              <div className="relative border-l border-slate-100 bg-gradient-to-br from-slate-50 to-white p-6">
+              <div className="relative border-t border-slate-100 bg-gradient-to-br from-slate-50 to-white p-6 md:border-l md:border-t-0">
                 <div className="absolute inset-0 opacity-40 shine" />
                 <div className="relative aspect-[1/1.2] rounded-xl border border-slate-200 bg-white p-5 text-[10px] leading-relaxed shadow-sm">
                   <div className="mb-2 border-b border-indigo-500 pb-1 text-center text-[11px] font-bold tracking-widest text-slate-800">

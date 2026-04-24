@@ -11,11 +11,11 @@ export default async function EditPage() {
 
   return (
     <AppShell user={{ name: user.name, email: user.email, plan: user.plan }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Éditeur PDF
         </h1>
-        <p className="mt-1.5 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:text-base">
           Uploadez un PDF et ajoutez du texte, une signature, des annotations directement dessus.
         </p>
       </div>
