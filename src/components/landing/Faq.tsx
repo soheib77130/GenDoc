@@ -33,13 +33,13 @@ const faqs = [
 export function Faq() {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section id="faq" className="relative py-24">
-      <div className="mx-auto max-w-3xl px-6">
+    <section id="faq" className="relative py-16 sm:py-24">
+      <div className="mx-auto max-w-3xl px-5 sm:px-6">
         <div className="text-center">
           <div className="inline-flex rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600 backdrop-blur">
             FAQ
           </div>
-          <h2 className="mt-4 text-balance text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
             Questions fréquentes
           </h2>
         </div>

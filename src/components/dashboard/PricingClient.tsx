@@ -67,14 +67,14 @@ export function PricingClient({
       )}
 
       {/* Plans */}
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-5 md:grid-cols-3">
         {plans.map((plan) => {
           const isCurrent = currentPlan === plan.id;
           return (
             <motion.div
               key={plan.id}
               whileHover={{ y: -4 }}
-              className={`relative overflow-hidden rounded-3xl border p-7 backdrop-blur transition-all ${
+              className={`relative overflow-hidden rounded-3xl border p-5 backdrop-blur transition-all sm:p-7 ${
                 plan.highlight
                   ? "border-indigo-300/60 bg-gradient-to-br from-white to-indigo-50/40 shadow-2xl shadow-indigo-500/10"
                   : "border-slate-200/70 bg-white/80"
@@ -156,22 +156,22 @@ export function PricingClient({
       </div>
 
       {/* Credit packs */}
-      <div id="credits" className="mt-14">
-        <div className="mb-6 flex items-center justify-between">
+      <div id="credits" className="mt-10 sm:mt-14">
+        <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
               Crédits à l'unité
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               Générer un document = 5 crédits · Modifier un PDF = 1 crédit.
             </p>
           </div>
-          <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 md:block">
+          <div className="self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
             Prix à l'unité : {formatEuros(unitPriceCts)}
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
           {packs.map((p) => (
             <motion.div
               key={p.id}
@@ -276,16 +276,16 @@ export function PricingClient({
                     </button>
                   </div>
 
-                  <div className="px-6 py-5">
-                    <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-cyan-50 p-5">
+                  <div className="px-5 py-5 sm:px-6">
+                    <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-cyan-50 p-4 sm:p-5">
                       <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Résumé
                       </div>
-                      <div className="mt-2 flex items-baseline justify-between">
+                      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
                         <div className="text-base font-medium text-slate-900">
                           {modal.label}
                         </div>
-                        <div className="text-2xl font-bold text-slate-900">
+                        <div className="text-xl font-bold text-slate-900 sm:text-2xl">
                           {formatEuros(modal.amountCts)}
                         </div>
                       </div>

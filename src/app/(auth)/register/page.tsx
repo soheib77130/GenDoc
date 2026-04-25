@@ -52,8 +52,8 @@ export default function RegisterPage() {
       transition={{ duration: 0.4 }}
       className="w-full"
     >
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+      <div className="mb-6 text-center sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
           Créez votre compte ✨
         </h1>
         <p className="mt-1.5 text-sm text-slate-600">
@@ -72,7 +72,7 @@ export default function RegisterPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-8 shadow-xl shadow-slate-900/5 backdrop-blur-xl">
+      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-xl shadow-slate-900/5 backdrop-blur-xl sm:p-8">
         <form onSubmit={onSubmit} className="space-y-5">
           <div>
             <Label htmlFor="name">Nom (optionnel)</Label>

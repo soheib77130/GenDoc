@@ -459,12 +459,12 @@ export function PdfEditor({ usage }: {
     return (
       <div
         onDragOver={e => e.preventDefault()} onDrop={onDrop}
-        className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white/60 px-8 py-24 text-center backdrop-blur transition hover:border-indigo-400 hover:bg-indigo-50/30"
+        className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white/60 px-5 py-16 text-center backdrop-blur transition hover:border-indigo-400 hover:bg-indigo-50/30 sm:px-8 sm:py-24"
       >
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-white shadow-xl shadow-indigo-500/30">
-          <Upload className="h-7 w-7" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-white shadow-xl shadow-indigo-500/30 sm:h-16 sm:w-16">
+          <Upload className="h-6 w-6 sm:h-7 sm:w-7" />
         </div>
-        <h2 className="mt-6 text-2xl font-semibold tracking-tight text-slate-900">Déposez votre PDF ici</h2>
+        <h2 className="mt-5 text-xl font-semibold tracking-tight text-slate-900 sm:mt-6 sm:text-2xl">Déposez votre PDF ici</h2>
         <p className="mt-2 max-w-sm text-sm text-slate-600">Glissez-déposez un PDF ou cliquez pour sélectionner. Le texte devient directement éditable.</p>
         <label className="mt-6 inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-medium text-white hover:bg-slate-800">
           <Upload className="h-4 w-4" />

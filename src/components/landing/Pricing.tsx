@@ -7,21 +7,21 @@ import { formatEuros } from "@/lib/utils";
 
 export function Pricing({ ctaHref = "/register" }: { ctaHref?: string }) {
   return (
-    <section id="pricing" className="relative py-24">
-      <div className="mx-auto max-w-6xl px-6">
+    <section id="pricing" className="relative py-16 sm:py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <div className="inline-flex rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600 backdrop-blur">
             Tarifs
           </div>
-          <h2 className="mt-4 text-balance text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
             Simple, transparent, flexible.
           </h2>
-          <p className="mt-4 text-slate-600">
+          <p className="mt-4 text-sm text-slate-600 sm:text-base">
             Payez à l'usage ou abonnez-vous. Changez ou annulez à tout moment.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
+        <div className="mt-10 grid gap-4 sm:mt-14 sm:gap-5 md:grid-cols-3">
           {PLANS.map((plan, i) => (
             <motion.div
               key={plan.id}
@@ -29,7 +29,7 @@ export function Pricing({ ctaHref = "/register" }: { ctaHref?: string }) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-50px" }}
               transition={{ duration: 0.4, delay: i * 0.08 }}
-              className={`relative overflow-hidden rounded-3xl border p-7 backdrop-blur ${
+              className={`relative overflow-hidden rounded-3xl border p-5 backdrop-blur sm:p-7 ${
                 plan.highlight
                   ? "border-indigo-300/60 bg-gradient-to-br from-white to-indigo-50/40 shadow-2xl shadow-indigo-500/10"
                   : "border-slate-200/70 bg-white/80"

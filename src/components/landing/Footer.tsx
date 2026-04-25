@@ -3,10 +3,10 @@ import { FileText } from "lucide-react";
 
 export function Footer() {
   return (
-    <footer className="relative border-t border-slate-200/70 bg-gradient-to-b from-transparent to-slate-50/70 py-14">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="grid gap-10 md:grid-cols-4">
-          <div className="md:col-span-2">
+    <footer className="relative border-t border-slate-200/70 bg-gradient-to-b from-transparent to-slate-50/70 py-10 sm:py-14">
+      <div className="mx-auto max-w-6xl px-5 sm:px-6">
+        <div className="grid gap-8 sm:grid-cols-2 sm:gap-10 md:grid-cols-4">
+          <div className="sm:col-span-2">
             <Link href="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md">
                 <FileText className="h-4 w-4 text-white" />

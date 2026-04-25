@@ -43,22 +43,22 @@ const features = [
 
 export function Features() {
   return (
-    <section id="features" className="relative py-24">
-      <div className="mx-auto max-w-6xl px-6">
+    <section id="features" className="relative py-16 sm:py-24">
+      <div className="mx-auto max-w-6xl px-5 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <div className="inline-flex rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600 backdrop-blur">
             Fonctionnalités
           </div>
-          <h2 className="mt-4 text-balance text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
             Tout ce dont vous avez besoin, rien de superflu.
           </h2>
-          <p className="mt-4 text-slate-600">
+          <p className="mt-4 text-sm text-slate-600 sm:text-base">
             Conçu pour être simple et puissant. Des outils pensés pour vous faire
             gagner du temps sur chaque document.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-4 sm:mt-14 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
           {features.map((f, i) => (
             <motion.div
               key={f.title}
