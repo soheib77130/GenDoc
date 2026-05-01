@@ -21,8 +21,8 @@ export function Navbar() {
       transition={{ duration: 0.5 }}
       className="fixed top-3 left-1/2 z-50 w-[min(1100px,calc(100%-1.5rem))] -translate-x-1/2 rounded-2xl border border-slate-200/60 bg-white/80 px-4 py-2.5 shadow-lg shadow-slate-900/5 backdrop-blur-xl sm:top-4 sm:px-5 sm:py-3"
     >
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-        <Link href="/" className="flex items-center gap-2 justify-self-start">
+      <div className="relative flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2">
           <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md shadow-indigo-500/40">
             <FileText className="h-4 w-4 text-white" />
             <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
@@ -32,28 +32,28 @@ export function Navbar() {
           </span>
         </Link>
 
-        <div className="hidden items-center gap-7 justify-self-center md:flex">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-7 md:flex">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className="text-sm text-slate-600 transition hover:text-slate-900"
+              className="pointer-events-auto text-sm text-slate-600 transition hover:text-slate-900"
             >
               {l.label}
             </Link>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 justify-self-end">
+        <div className="flex items-center gap-2">
           <Link
             href="/login"
-            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
+            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 md:inline-flex"
           >
             Connexion
           </Link>
           <Link
             href="/register"
-            className="hidden items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 sm:inline-flex"
+            className="hidden items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 md:inline-flex"
           >
             Commencer
           </Link>
