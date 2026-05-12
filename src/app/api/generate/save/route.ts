@@ -3,7 +3,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getTemplate, getCategory } from "@/lib/templates";
 import { getQuotaStatus, consumeAction } from "@/lib/quota";
-import { bytesToBase64, fillPdfFormTemplate, renderTemplateToPdf } from "@/lib/pdf";
+import {
+  bytesToBase64,
+  renderContratProfessionnalisationPdf,
+  renderTemplateToPdf,
+} from "@/lib/pdf";
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -29,8 +33,8 @@ export async function POST(req: NextRequest) {
   const data = body.data || {};
   let pdf: Uint8Array;
   try {
-    if (tpl.pdfForm) {
-      pdf = await fillPdfFormTemplate(tpl.pdfForm.templatePath, tpl.pdfForm.mapValues(data));
+    if (tpl.id === "contrat-professionnalisation") {
+      pdf = await renderContratProfessionnalisationPdf(data);
     } else {
       const rendered = tpl.render(data);
       pdf = await renderTemplateToPdf(rendered);
